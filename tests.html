@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>C# 小勇者 測試</title>
+<style>
+  body { font: 14px/1.5 Consolas, monospace; margin: 16px; background: #fff; color: #111; }
+  .pass { color: #15803d; }
+  .fail { color: #b91c1c; font-weight: bold; }
+  pre { white-space: pre-wrap; margin: 0 0 0 1.5em; color: #444; }
+  #summary { font-size: 18px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div id="summary">執行中…</div>
+<div id="out"></div>
+<script src="js/interpreter.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/stage-grid.js"></script>
+<script src="js/stage-unity.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/workshop.js"></script>
+<script>
+(function () {
+  const out = document.getElementById('out');
+  const results = [];
+  function report(name, ok, detail) {
+    results.push({ name, ok, detail });
+    const d = document.createElement('div');
+    d.className = ok ? 'pass' : 'fail';
+    d.textContent = (ok ? '✓ ' : '✗ ') + name;
+    out.appendChild(d);
+    if (!ok && detail) {
+      const p = document.createElement('pre');
+      p.textContent = detail;
+      out.appendChild(p);
+    }
+  }
+  function test(name, fn) {
+    try {
+      const r = fn();
+      if (r === true || r === undefined) report(name, true);
+      else report(name, false, String(r));
+    } catch (e) {
+      report(name, false, (e && e.stack) || String(e));
+    }
+  }
+  const SPEC = { funcs: {
+    MoveRight: CSQ.sig('void', ['int'], 0), MoveUp: CSQ.sig('void', ['int'], 0), SeeEnemy: CSQ.sig('bool', []), Say: CSQ.sig('void', ['?'])
+  } };
+  function run(code, opts) {
+    opts = opts || {};
+    const comp = CSQ.compile(code, { spec: opts.spec || SPEC, requireUsings: opts.requireUsings });
+    if (!comp.ok) return { compile: comp.errors, warnings: comp.warnings };
+    const logs = [];
+    const calls = [];
+    const funcs = {};
+    Object.keys(SPEC.funcs).forEach((k) => { funcs[k] = (a) => { calls.push(k + '(' + a.join(',') + ')'); return k === 'SeeEnemy' ? true : undefined; }; });
+    const rt = new CSQ.Runtime(comp.prog, { host: { funcs, log: (t) => logs.push(t) }, maxSteps: opts.maxSteps || 20000 });
+    let err = null;
+    try { rt.runMain(); } catch (e) { if (e instanceof CSQ.CsError) err = e; else throw e; }
+    return { logs, calls, err, rt, comp, warnings: comp.warnings };
+  }
+  function expectLogs(code, want) {
+    const r = run(code);
+    if (r.compile) return 'compile error: ' + r.compile.map((e) => e.code + ' ' + e.message + ' @' + e.line + ':' + e.col).join('\n');
+    if (r.err) return 'runtime: ' + r.err.code + ' ' + r.err.message;
+    const got = r.logs.join('|');
+    return got === want.join('|') ? true : `want ${JSON.stringify(want)} got ${JSON.stringify(r.logs)}`;
+  }
+  function expectCompile(code, codeWant, line, col) {
+    const r = run(code);
+    if (!r.compile) return 'compiled OK but expected ' + codeWant + (r.err ? ' (runtime ' + r.err.code + ')' : '');
+    const e = r.compile[0];
+    if (e.code !== codeWant) return `want ${codeWant} got ${e.code}: ${e.message}`;
+    if (line && (e.line !== line || (col && e.col !== col))) return `want @${line}:${col} got @${e.line}:${e.col}`;
+    return true;
+  }
+  function expectRuntime(code, codeWant) {
+    const r = run(code);
+    if (r.compile) return 'compile error: ' + r.compile.map((e) => e.code + ' ' + e.message).join('\n');
+    if (!r.err) return 'no runtime error';
+    return r.err.code === codeWant ? true : `want ${codeWant} got ${r.err.code}`;
+  }
+
+  /* ---------------- 直譯器 ---------------- */
+  test('整數除法', () => expectLogs('int x = 7 / 2; Debug.Log(x);', ['3']));
+  test('float 除法', () => expectLogs('Debug.Log(7 / 2f);', ['3.5']));
+  test('float 精度 0.1f+0.2f', () => expectLogs('float a = 0.1f + 0.2f; Debug.Log(a);', ['0.3']));
+  test('double 精度', () => expectLogs('double a = 0.1 + 0.2; Debug.Log(a);', ['0.30000000000000004']));
+  test('bool 印成 True', () => expectLogs('bool b = true; Debug.Log(b); Debug.Log("a" + false);', ['True', 'aFalse']));
+  test('字串插值與格式', () => expectLogs('float pi = 3.14159f; int hp = 5; Debug.Log($"HP:{hp} PI:{pi:F2}");', ['HP:5 PI:3.14']));
+  test('for 迴圈', () => expectLogs('int s = 0; for (int i = 1; i <= 4; i++) { s += i; } Debug.Log(s);', ['10']));
+  test('while + break', () => expectLogs('int i = 0; while (true) { i++; if (i == 3) break; } Debug.Log(i);', ['3']));
+  test('foreach 陣列', () => expectLogs('int[] a = { 2, 3, 4 }; int s = 0; foreach (int x in a) s += x; Debug.Log(s); Debug.Log(a.Length);', ['9', '3']));
+  test('List', () => expectLogs('List<string> b = new List<string>(); b.Add("劍"); b.Add("盾"); b.Remove("劍"); Debug.Log(b.Count); Debug.Log(b[0]); Debug.Log(b.Contains("盾"));', ['1', '盾', 'True']));
+  test('List 初始化', () => expectLogs('var b = new List<int> { 1, 2, 3 }; Debug.Log(b.Count);', ['3']));
+  test('switch', () => expectLogs('string w = "bow"; int d; switch (w) { case "sword": d = 10; break; case "bow": d = 6; break; default: d = 1; break; } Debug.Log(d);', ['6']));
+  test('三元運算子', () => expectLogs('int hp = 0; string m = hp > 0 ? "活著" : "倒下"; Debug.Log(m);', ['倒下']));
+  test('方法與回傳值', () => expectLogs('int Heal(int hp, int amount) { return Mathf.Min(hp + amount, 100); }\nDebug.Log(Heal(90, 30));', ['100']));
+  test('類別、建構子、this', () => expectLogs('public class Enemy { public string name; public int hp; public Enemy(string name, int hp) { this.name = name; this.hp = hp; } public void Hit(int d) { hp -= d; } }\nEnemy e = new Enemy("史萊姆", 20); e.Hit(5); Debug.Log($"{e.name} {e.hp}");', ['史萊姆 15']));
+  test('Vector 運算', () => expectLogs('Vector3 v = new Vector3(1, 2, 0) + Vector3.up; Debug.Log(v); Vector2 d = new Vector2(1, 1).normalized; Debug.Log(d.x > 0.7f);', ['(1.00, 3.00, 0.00)', 'True']));
+  test('Mathf.Clamp（Unity 規則）', () => expectLogs('Debug.Log(Mathf.Clamp(10, 0, 5)); Debug.Log(Mathf.Clamp(2.5f, 0f, 1f));', ['5', '1']));
+  test('=+ 是指定成正數', () => expectLogs('int s = 3; s =+ 1; Debug.Log(s);', ['1']));
+  test('top-level 方法可用外層變數', () => expectLogs('int n = 2;\nvoid Twice() { n *= 2; }\nTwice(); Twice(); Debug.Log(n);', ['8']));
+  test('呼叫指令', () => { const r = run('MoveRight();\nMoveRight(3);'); return r.calls.join(' ') === 'MoveRight() MoveRight(3)' || r.calls.join(' '); });
+
+  test('CS1002 少分號（位置在上一行結尾）', () => expectCompile('MoveRight()\nMoveUp();', 'CS1002', 1, 12));
+  test('CS1056 全形分號', () => expectCompile('MoveRight()；', 'CS1056'));
+  test('CS0103 大小寫', () => expectCompile('moveRight();', 'CS0103'));
+  test('CS0103 True', () => expectCompile('bool b = True;', 'CS0103'));
+  test('CS0664 float 少 f', () => expectCompile('float s = 5.5;', 'CS0664', 1, 11));
+  test('CS0266 float→int', () => expectCompile('int s = 2.5f;', 'CS0266'));
+  test('CS0029 string→int', () => expectCompile('int s = "5";', 'CS0029'));
+  test('CS0029 if (x = 5)', () => expectCompile('int x = 0; if (x = 5) { }', 'CS0029'));
+  test('CS1012 單引號字串', () => expectCompile("string s = 'abc';", 'CS1012'));
+  test('CS0201 少括號', () => expectCompile('MoveRight;', 'CS0201'));
+  test('CS0201 比較當指令', () => expectCompile('int hp = 1; hp == 0;', 'CS0201'));
+  test('CS0428 方法沒加括號', () => expectCompile('if (SeeEnemy) { }', 'CS0428'));
+  test('CS0023 ! 方法群組', () => expectCompile('while (!SeeEnemy) { }', 'CS0023'));
+  test('CS0163 switch 漏 break', () => expectCompile('int d = 0; switch (d) { case 1: d = 2; case 2: d = 3; break; }', 'CS0163'));
+  test('CS0161 沒有 return', () => expectCompile('bool IsSafe() { if (true) { return true; } }\nIsSafe();', 'CS0161'));
+  test('CS0127 void return 值', () => expectCompile('void A() { return 1; }', 'CS0127'));
+  test('CS0128 重複宣告', () => expectCompile('int a = 1; int a = 2;', 'CS0128'));
+  test('CS1061 List.Length', () => expectCompile('var b = new List<int>(); Debug.Log(b.Length);', 'CS1061'));
+  test('CS0117 Debug.log', () => expectCompile('Debug.log("x");', 'CS0117'));
+  test('CS1002 Python 的 //', () => expectCompile('int coins = 7;\nfloat half = coins // 2;\nDebug.Log(half);', 'CS1002', 2, 19));
+  test('CS1955 少了 new', () => expectCompile('public class Slime { public Slime(int p) { } }\nSlime a = Slime(3);', 'CS1955'));
+  test('CS0122 private 欄位', () => expectCompile('public class Slime { int power; }\nSlime a = new Slime(); a.power = 3;', 'CS0122'));
+  test('CS0201 for 迭代器', () => expectCompile('for (int i = 0; i < 3; i + 1) { }', 'CS0201'));
+  test('CS1624 非協程用 yield', () => expectCompile('public class A { void F() { yield return null; } }', 'CS1624'));
+  test('CS1612 改 position.x', () => expectCompile('using UnityEngine;\npublic class H : MonoBehaviour { void Update() { transform.position.x += 1f; } }', 'CS1612'));
+  test('CS0246 屬性拼錯', () => expectCompile('public class H : MonoBehaviour { [SerializeFeild] private float speed = 1f; }', 'CS0246'));
+  test('CS0547 void Update 沒括號', () => expectCompile('public class H : MonoBehaviour { void Update { } }', 'CS0547'));
+  test('CS0120 用類別名稱呼叫實例方法', () => expectCompile('GameManager.AddScore(1);', 'CS0120'));
+  test('CS0618 velocity 過時（警告）', () => {
+    const r = run('public class H : MonoBehaviour { private Rigidbody2D rb; void F() { rb.velocity = Vector2.zero; } }');
+    if (r.compile) return 'compile error ' + r.compile[0].code;
+    return r.warnings.some((w) => w.code === 'CS0618') || 'no warning';
+  });
+  test('CS0642 if 後的分號（警告）', () => {
+    const r = run('int x = 1; if (x > 0); { x = 2; }');
+    return (r.warnings && r.warnings.some((w) => w.code === 'CS0642')) || 'no warning';
+  });
+  test('using 檢查：Keyboard 需要 InputSystem', () => {
+    const r = run('using UnityEngine;\npublic class H : MonoBehaviour { void Update() { if (Keyboard.current.dKey.isPressed) { } } }', { requireUsings: true });
+    return (r.compile && r.compile[0].code === 'CS0103') || 'want CS0103';
+  });
+  test('Unity 物件可以當 bool', () => { const r = run('public class H : MonoBehaviour { void F() { if (Physics2D.OverlapCircle(Vector2.zero, 1f)) { } } }'); return !r.compile || r.compile[0].code; });
+
+  test('IndexOutOfRange', () => expectRuntime('int[] a = { 1, 2 }; Debug.Log(a[2]);', 'IndexOutOfRangeException'));
+  test('索引 -1', () => expectRuntime('int[] a = { 1, 2 }; Debug.Log(a[-1]);', 'IndexOutOfRangeException'));
+  test('List 越界', () => expectRuntime('var a = new List<int>(); Debug.Log(a[0]);', 'ArgumentOutOfRangeException'));
+  test('NullReference', () => expectRuntime('List<int> a = null; a.Add(1);', 'NullReferenceException'));
+  test('除以 0', () => expectRuntime('int z = 0; Debug.Log(5 / z);', 'DivideByZeroException'));
+  test('foreach 中修改 List', () => expectRuntime('var a = new List<int> { 1, 2 }; foreach (int x in a) { a.Add(x); }', 'InvalidOperationException'));
+  test('無限迴圈 → 凍結', () => { const r = run('int i = 0; while (i < 10) { }'); return (r.err && r.err.kind === 'freeze') || 'no freeze'; });
+  test('協程 enumerator', () => {
+    const comp = CSQ.compile('using System.Collections;\nusing UnityEngine;\npublic class A : MonoBehaviour { IEnumerator Co() { Debug.Log(1); yield return new WaitForSeconds(1f); Debug.Log(2); } }', { spec: SPEC });
+    if (!comp.ok) return comp.errors[0].message;
+    const logs = [];
+    const rt = new CSQ.Runtime(comp.prog, { host: { log: (t) => logs.push(t) } });
+    const obj = rt.newInstance('A', null);
+    const en = rt.invoke(obj, 'Co');
+    if (!en || en.kind !== 'enumerator') return 'not enumerator';
+    const g = en.make();
+    const y1 = g.next();
+    if (logs.join() !== '1' || !y1.value || y1.value.yr.kind !== 'wait') return 'first step wrong ' + logs.join();
+    g.next();
+    return logs.join() === '1,2' || logs.join();
+  });
+  test('事件 += -=', () => expectLogs('public class P { public event Action<int> OnHit; public void Hit() { OnHit?.Invoke(3); } }\npublic class U { public int got; public void Sub(P p) { p.OnHit += Show; } public void Unsub(P p) { p.OnHit -= Show; } void Show(int v) { got += v; Debug.Log(v); } }\nP p = new P(); U u = new U(); u.Sub(p); p.Hit(); u.Unsub(p); p.Hit(); Debug.Log(u.got);', ['3', '3']));
+
+  /* ---------------- 關卡 ---------------- */
+  if (window.CSQLevels && window.CSQLevelTest) window.CSQLevelTest(test, report);
+
+  /* ---------------- 工作坊 ---------------- */
+  if (window.CSQWorkshop) {
+    const WS = window.CSQWorkshop;
+    const solidCount = (w) => w.solid.reduce((s, row) => s + row.filter(Boolean).length, 0);
+    const hazardCount = (w) => w.hazard.reduce((s, row) => s + row.filter(Boolean).length, 0);
+    const alive = (w, tag) => w.entities.filter((e) => !e.destroyed && e.tag === tag);
+    const errText = (r) => (r.compile && !r.compile.ok ? r.compile.errors.map((e) => `${e.file}(${e.line}) ${e.code} ${e.message}`).join('\n') : '');
+    test('工作坊：三份預設腳本可以編譯', () => { const c = WS.compileAll({}); return c.ok || c.errors.map((e) => `${e.file}(${e.line}) ${e.code} ${e.message}`).join('\n'); });
+    test('工作坊：跑 5 秒沒有錯誤', () => {
+      const r = WS.simulate({}, { duration: 5 });
+      if (!r.world) return errText(r);
+      if (r.world.frozen) return 'freeze';
+      return r.world.errors.length === 0 || r.world.errors.map((e) => e.code + ' ' + e.message).join('\n');
+    });
+    test('工作坊：LevelBuilder 照預設值蓋關卡', () => {
+      const w = WS.simulate({}, { duration: 0.1 }).world;
+      const got = { ground: solidCount(w), spikes: hazardCount(w), coins: alive(w, 'Coin').length, enemies: alive(w, 'Enemy').length, goals: alive(w, 'Finish').length };
+      const want = { ground: 19, spikes: 1, coins: 5, enemies: 1, goals: 1 };
+      return JSON.stringify(got) === JSON.stringify(want) || `want ${JSON.stringify(want)} got ${JSON.stringify(got)}`;
+    });
+    test('工作坊：Inspector 改場景數值', () => {
+      const w = WS.simulate({}, { duration: 0.1, inspector: { Builder: { pitWidth: 5, coinCount: 7, enemyCount: 3, groundHeight: 2 } } }).world;
+      const got = { ground: solidCount(w), coins: alive(w, 'Coin').length, enemies: alive(w, 'Enemy').length };
+      const want = { ground: 34, coins: 7, enemies: 3 };
+      return JSON.stringify(got) === JSON.stringify(want) || `want ${JSON.stringify(want)} got ${JSON.stringify(got)}`;
+    });
+    test('工作坊：跳過坑並撿到金幣', () => {
+      const w = WS.simulate({}, { duration: 1.85, input: [[0.1, 1.85, 'd'], [0.98, 1.06, 'space']] }).world;
+      if (w.player.dead) return '勇者' + w.player.deathReason;
+      if (w.gm.gameOvers) return 'Game Over';
+      if (w.player.x < 11.5) return `勇者停在 x=${w.player.x.toFixed(2)}，沒有跳過坑`;
+      return w.gm.score >= 2 || `只撿到 ${w.gm.score} 枚金幣`;
+    });
+    test('工作坊：敵人看到玩家會追過來', () => {
+      const w = WS.simulate({}, { duration: 1, inspector: { Enemy: { chaseRange: 20 } } }).world;
+      const e = alive(w, 'Enemy')[0];
+      if (!e) return '沒有敵人';
+      if (e.x > 12.5) return `敵人在 x=${e.x.toFixed(2)}，沒有往玩家移動`;
+      return (e.color.r === 1 && e.color.g === 0) || '追擊時沒有變紅';
+    });
+    test('工作坊：錯誤會對回正確的檔案和行號', () => {
+      const bad = WS.FILES[1].code.replace('rb = GetComponent<Rigidbody2D>();', 'rb = GetComponent<Rigidbody2D>()');
+      const c = WS.compileAll({ player: bad });
+      if (c.ok) return '應該要有錯誤';
+      const e = c.errors[0];
+      return (e.file === 'PlayerController.cs' && e.line === 19 && e.code === 'CS1002') || `${e.file}(${e.line}) ${e.code}`;
+    });
+    test('工作坊：R 鍵重新開始', () => {
+      const w = WS.simulate({}, { duration: 1, input: [[0.5, 0.6, 'r']] }).world;
+      return w.stats.reloads === 1 || `reloads=${w.stats.reloads}`;
+    });
+  }
+
+  const bad = results.filter((r) => !r.ok).length;
+  const sum = document.getElementById('summary');
+  sum.textContent = bad ? `✗ ${bad} 個失敗，共 ${results.length} 個` : `✓ 全部 ${results.length} 個通過`;
+  sum.className = bad ? 'fail' : 'pass';
+  window.__testResults = { total: results.length, failed: results.filter((r) => !r.ok).map((r) => r.name + ': ' + (r.detail || '')) };
+})();
+</script>
+</body>
+</html>

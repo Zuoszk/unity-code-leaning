@@ -1,0 +1,3104 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unity C# 闖關手冊</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&family=Pixelify+Sans:wght@500;700&display=swap">
+<style>
+/* Layout: 左側是關卡地圖（章節目錄），右側一次顯示一關；背景是 32px 的 tilemap 格線 */
+:root {
+  --bg: #E9EDF3;
+  --surface: #FFFFFF;
+  --surface-2: #F3F6FA;
+  --ink: #18202E;
+  --muted: #566173;
+  --line: #D3DAE4;
+  --grid: rgba(47, 91, 234, 0.06);
+  --accent: #2F5BEA;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3EAFE;
+  --coin: #C98C05;
+  --coin-soft: #FBF0D4;
+  --good: #1B8A57;
+  --good-soft: #DDF3E8;
+  --bad: #C63D33;
+  --bad-soft: #FBE4E1;
+  --warn: #9A6A00;
+  --code-bg: #161B26;
+  --code-head: #1E2533;
+  --code-fg: #DCE2EE;
+  --code-line: #2A3242;
+  --code-muted: #8590A6;
+  --hl-kw: #8FB2FF;
+  --hl-str: #F2C46B;
+  --hl-num: #F59E8B;
+  --hl-com: #74819A;
+  --hl-type: #7FDCC4;
+  --hl-fn: #E6A6F5;
+  --hl-meta: #B8C47A;
+  --console-err: #FF8A80;
+  --console-warn: #FFD27A;
+
+  --font-display: "Pixelify Sans", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-body: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+
+  --fs-xs: 0.8125rem;
+  --fs-s: 0.9rem;
+  --fs-m: 1rem;
+  --fs-l: 1.25rem;
+  --fs-xl: 1.6rem;
+  --fs-xxl: 2.1rem;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F131A;
+    --surface: #171C25;
+    --surface-2: #1D2330;
+    --ink: #E5E9F1;
+    --muted: #9AA4B5;
+    --line: #2A3140;
+    --grid: rgba(124, 155, 255, 0.05);
+    --accent: #7C9BFF;
+    --accent-ink: #0F131A;
+    --accent-soft: #1F2A4A;
+    --coin: #F0B630;
+    --coin-soft: #3A2F12;
+    --good: #4CC38A;
+    --good-soft: #143326;
+    --bad: #F07067;
+    --bad-soft: #3A1A18;
+    --warn: #F0C060;
+    --code-bg: #0B0F15;
+    --code-head: #131925;
+    --code-line: #222A38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F131A;
+  --surface: #171C25;
+  --surface-2: #1D2330;
+  --ink: #E5E9F1;
+  --muted: #9AA4B5;
+  --line: #2A3140;
+  --grid: rgba(124, 155, 255, 0.05);
+  --accent: #7C9BFF;
+  --accent-ink: #0F131A;
+  --accent-soft: #1F2A4A;
+  --coin: #F0B630;
+  --coin-soft: #3A2F12;
+  --good: #4CC38A;
+  --good-soft: #143326;
+  --bad: #F07067;
+  --bad-soft: #3A1A18;
+  --warn: #F0C060;
+  --code-bg: #0B0F15;
+  --code-head: #131925;
+  --code-line: #222A38;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-m);
+  line-height: 1.75;
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.35; margin: 0; }
+p { margin: 0; }
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.05em 0.35em;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- 頂部列 ---------- */
+.topbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  padding-block: 10px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand-mark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-l);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.brand-mark span { color: var(--accent); }
+.brand-sub { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.xp { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.xp-label { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.xp-label b { font-family: var(--font-display); color: var(--ink); font-size: var(--fs-s); }
+.xp-bar { display: grid; grid-template-columns: repeat(11, 12px); gap: 3px; }
+.xp-bar i {
+  display: block; height: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.xp-bar i.on { background: var(--coin); border-color: var(--coin); }
+.menu-btn {
+  display: none;
+  font: inherit;
+  font-size: var(--fs-s);
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+/* ---------- 主版面 ---------- */
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  padding-block: 28px 72px;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.levels {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 76px);
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.levels-title {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 4px 8px 8px;
+}
+.levels ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lv-link {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: var(--fs-s);
+  line-height: 1.4;
+}
+.lv-link:hover { background: var(--surface-2); }
+.lv-link[aria-current="page"] { background: var(--accent-soft); }
+.lv-num { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv-link[aria-current="page"] .lv-num { color: var(--accent); }
+.lv-name { min-width: 0; }
+.lv-score { display: block; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.coin {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--line);
+  flex: none;
+}
+.coin.on {
+  border-color: var(--coin);
+  background: radial-gradient(circle at 35% 35%, var(--coin-soft) 0 18%, var(--coin) 20%);
+}
+
+/* ---------- 章節內容 ---------- */
+.chapter { min-width: 0; max-width: 780px; display: grid; gap: 28px; }
+.chapter-head { display: grid; gap: 8px; }
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--fs-s);
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.chapter h1 { font-size: var(--fs-xxl); font-weight: 700; }
+.lede { color: var(--muted); font-size: 1.05rem; max-width: 62ch; }
+.chapter section { display: grid; gap: 14px; min-width: 0; }
+.chapter h2 {
+  font-size: var(--fs-l);
+  font-weight: 700;
+  padding-top: 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.chapter h3 { font-size: 1.05rem; font-weight: 700; }
+.prose { display: grid; gap: 12px; max-width: 68ch; }
+.prose ul, .prose ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+
+.tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tag-bad { background: var(--bad-soft); color: var(--bad); }
+.tag-try { background: var(--accent-soft); color: var(--accent); }
+.tag-quiz { background: var(--coin-soft); color: var(--warn); }
+
+.box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.box ul { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.tbl table { border-collapse: collapse; width: 100%; font-size: var(--fs-s); }
+.tbl th, .tbl td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl th { font-size: var(--fs-xs); color: var(--muted); font-weight: 500; letter-spacing: 0.04em; background: var(--surface-2); white-space: nowrap; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl td:first-child { white-space: nowrap; }
+
+/* 程式碼區塊 */
+.code {
+  margin: 0;
+  background: var(--code-bg);
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-width: 0;
+}
+.code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--code-head);
+  border-bottom: 1px solid var(--code-line);
+  padding: 6px 8px 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--code-muted);
+}
+.copy {
+  font: inherit;
+  color: var(--code-fg);
+  background: transparent;
+  border: 1px solid var(--code-line);
+  border-radius: 6px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.copy:hover { background: var(--code-line); }
+.code pre { margin: 0; overflow-x: auto; padding: 14px 16px; }
+.code pre code {
+  background: none; border: 0; padding: 0;
+  color: var(--code-fg);
+  font-size: 0.84rem;
+  line-height: 1.65;
+  overflow-wrap: normal;
+  white-space: pre;
+  display: block;
+}
+.hljs-keyword, .hljs-built_in, .hljs-literal { color: var(--hl-kw); }
+.hljs-string, .hljs-subst .hljs-string { color: var(--hl-str); }
+.hljs-subst { color: var(--code-fg); }
+.hljs-number { color: var(--hl-num); }
+.hljs-comment { color: var(--hl-com); font-style: italic; }
+.hljs-type, .hljs-title.class_ { color: var(--hl-type); }
+.hljs-title.function_, .hljs-title { color: var(--hl-fn); }
+.hljs-meta, .hljs-meta .hljs-keyword { color: var(--hl-meta); }
+.hljs-params { color: var(--code-fg); }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.compare .code-head .lang-py { color: var(--hl-str); }
+.compare .code-head .lang-cs { color: var(--hl-type); }
+
+/* Console 視窗（模擬 Unity Console） */
+.console {
+  background: var(--code-bg);
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.console-head {
+  background: var(--code-head);
+  color: var(--code-muted);
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--code-line);
+  font-size: 0.75rem;
+}
+.console-body { padding: 8px 0; overflow-x: auto; }
+.console-line {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px;
+  padding: 3px 14px;
+  color: var(--code-fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.console-line::before { content: "i"; color: var(--code-muted); text-align: center; }
+.console-line.err { color: var(--console-err); }
+.console-line.err::before { content: "!"; color: var(--console-err); font-weight: 600; }
+.console-line.warn { color: var(--console-warn); }
+.console-line.warn::before { content: "▲"; color: var(--console-warn); font-size: 0.65rem; padding-top: 2px; }
+
+/* 流程鏈 */
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.flow .step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.flow .loop {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--accent-soft);
+}
+.flow .loop-label { font-size: var(--fs-xs); color: var(--accent); font-weight: 700; }
+.flow .arrow { color: var(--muted); font-size: var(--fs-s); }
+
+details.answer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 8px 12px;
+}
+details.answer > summary { cursor: pointer; font-size: var(--fs-s); color: var(--accent); font-weight: 500; }
+details.answer[open] { display: grid; gap: 10px; }
+details.answer[open] > summary { margin-bottom: 4px; }
+
+/* 測驗 */
+.quiz { display: grid; gap: 16px; }
+.q { display: grid; gap: 8px; }
+.q-text { font-weight: 500; }
+.q-text .q-no { font-family: var(--font-display); color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.opts { display: grid; gap: 6px; }
+.opt {
+  font: inherit;
+  font-size: var(--fs-s);
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.opt:hover:not(:disabled) { border-color: var(--accent); }
+.opt:disabled { cursor: default; }
+.opt.right { background: var(--good-soft); border-color: var(--good); color: var(--ink); }
+.opt.wrong { background: var(--bad-soft); border-color: var(--bad); color: var(--ink); }
+.opt .mark { font-weight: 700; margin-right: 6px; }
+.opt.right .mark { color: var(--good); }
+.opt.wrong .mark { color: var(--bad); }
+.explain { font-size: var(--fs-s); color: var(--muted); padding-left: 2px; }
+.quiz-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
+.quiz-score { font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums; }
+.quiz-score b { color: var(--ink); font-family: var(--font-display); font-size: var(--fs-m); }
+
+.btn {
+  font: inherit;
+  font-size: var(--fs-s);
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-done { background: var(--coin-soft); border-color: var(--coin); color: var(--ink); font-weight: 700; }
+.btn-ghost { background: transparent; }
+
+.chapter-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.chapter-foot .mid { display: flex; justify-content: center; flex: 1; }
+.btn-complete { display: inline-flex; align-items: center; gap: 8px; }
+.btn-complete .coin { width: 18px; height: 18px; }
+.coin.pop { animation: pop 0.5s ease-out; }
+@keyframes pop {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-10px) scale(1.3); }
+  100% { transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .coin.pop { animation: none; } }
+
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.checklist label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: var(--fs-s); }
+.checklist input { margin-top: 0.35em; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+
+.steps-list { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.steps-list > li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+.steps-list > li::before {
+  content: counter(s);
+  font-family: var(--font-display);
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--surface);
+}
+.path { font-family: var(--font-mono); font-size: 0.86em; color: var(--ink); background: var(--surface-2); border-radius: 4px; padding: 0 4px; }
+
+@media (max-width: 880px) {
+  .app { grid-template-columns: minmax(0, 1fr); padding-inline: 16px; gap: 20px; padding-block: 16px 56px; }
+  .topbar-inner { padding-inline: 16px; }
+  .menu-btn { display: inline-block; }
+  .levels { display: none; position: static; max-height: none; }
+  .levels.open { display: block; }
+  .brand-sub { display: none; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
+  .chapter h1 { font-size: var(--fs-xl); }
+}
+@media (max-width: 520px) {
+  .xp-bar { grid-template-columns: repeat(11, 8px); gap: 2px; }
+  .xp { margin-left: 0; width: 100%; justify-content: space-between; }
+  .box { padding: 14px 14px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark">Unity <span>C#</span> 闖關手冊</div>
+      <div class="brand-sub">從 Python 跨到 C#，一關一關做出 2D 遊戲</div>
+    </div>
+    <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="levels">關卡選單</button>
+    <div class="xp" aria-live="polite">
+      <div class="xp-label">已通關 <b id="xpCount">0</b> / 11</div>
+      <div class="xp-bar" id="xpBar" aria-hidden="true"></div>
+    </div>
+  </div>
+</header>
+
+<div class="app">
+  <nav class="levels" id="levels" aria-label="關卡">
+    <div class="levels-title">關卡地圖</div>
+    <ol id="levelList"></ol>
+  </nav>
+
+  <main id="main">
+
+<!-- ======================= LV.00 ======================= -->
+<article class="chapter" id="ch0" data-lv="00" data-short="開始之前">
+  <header class="chapter-head">
+    <div class="eyebrow">LV.00 · 新手村</div>
+    <h1>開始之前：裝好 Unity，寫出第一支腳本</h1>
+    <p class="lede">這一關不用寫太多程式。目標是把工具裝好、認得 Unity 的幾個視窗，並讓 Console 印出第一行字。</p>
+  </header>
+
+  <section>
+    <h2>這本手冊怎麼用</h2>
+    <div class="prose">
+      <ul>
+        <li>每一關的順序都一樣：<b>概念</b> → <b>程式碼範例</b> → <b>常見錯誤</b> → <b>動手練習</b> → <b>小測驗</b>。</li>
+        <li>LV.01 到 LV.03 會把 Python 和 C# 並排對照，你會 Python，就能很快抓到差別。</li>
+        <li>程式碼右上角有「複製」按鈕，可以直接貼進 Unity 的 <code>.cs</code> 檔。</li>
+        <li>讀完一關就按「標記完成」，頂部的經驗條會累積。進度只存在這台電腦的這個瀏覽器裡。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>安裝三樣東西</h2>
+    <ol class="steps-list">
+      <li><div><b>Unity Hub</b>：到 <a href="https://unity.com/download" target="_blank" rel="noopener">unity.com/download</a> 下載。它負責管理 Unity 版本和專案。</div></li>
+      <li><div><b>Unity 6 LTS</b>（版本號是 <code>6000.x</code>）：在 Hub 的 Installs → Install Editor 安裝。建議選 LTS，教學和套件最穩定。</div></li>
+      <li><div><b>程式編輯器</b>：安裝 Unity 時勾選 <b>Visual Studio Community</b> 最省事。想用 VS Code 也可以，要另外裝 <b>C# Dev Kit</b> 和 <b>Unity</b> 擴充套件，再到 Unity 的 <span class="path">Edit → Preferences → External Tools</span> 把編輯器設成 VS Code。</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>建立 2D 專案</h2>
+    <div class="prose">
+      <p>在 Hub 按 <b>New project</b>，範本選 <b>Universal 2D</b>（URP 的 2D 版本），取個名字（建議用英文路徑，例如 <span class="path">D:\UnityProjects\MyFirst2D</span>），按 Create。</p>
+      <p>第一次開啟會花幾分鐘匯入資源，這是正常的。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>認識六個視窗</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>視窗</th><th>做什麼</th><th>類比</th></tr></thead>
+        <tbody>
+          <tr><td>Scene</td><td>擺放、移動場景裡的物件</td><td>關卡編輯器</td></tr>
+          <tr><td>Game</td><td>玩家實際看到的畫面（按 Play 後在這裡玩）</td><td>遊戲螢幕</td></tr>
+          <tr><td>Hierarchy</td><td>目前場景裡所有物件的清單，可以有父子層級</td><td>資料夾樹</td></tr>
+          <tr><td>Inspector</td><td>選中物件身上的元件和參數，可以直接改數值</td><td>屬性面板</td></tr>
+          <tr><td>Project</td><td>專案裡的檔案：圖片、音效、腳本、Prefab</td><td>檔案總管</td></tr>
+          <tr><td>Console</td><td><code>Debug.Log</code> 的輸出、警告和錯誤訊息</td><td>Python 的終端機輸出</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>第一支腳本</h2>
+    <ol class="steps-list">
+      <li><div>在 Project 視窗建立資料夾 <span class="path">Assets/Scripts</span>。</div></li>
+      <li><div>在資料夾裡按右鍵 → <span class="path">Create → MonoBehaviour Script</span>（舊版叫 C# Script），命名為 <code>Hello</code>。<b>名字要在建立時就打好</b>，因為檔名會決定 class 名稱。</div></li>
+      <li><div>雙擊打開，改成下面的內容並存檔。</div></li>
+      <li><div>把腳本從 Project 拖到 Hierarchy 裡的 <b>Main Camera</b> 上，按上方的 ▶ Play，看 Console。</div></li>
+    </ol>
+    <script type="text/x-code" data-lang="csharp" data-file="Hello.cs">
+using UnityEngine;
+
+public class Hello : MonoBehaviour
+{
+    void Start()
+    {
+        Debug.Log("Hello, Unity!");
+    }
+}
+    </script>
+    <script type="text/x-console">
+Hello, Unity!
+UnityEngine.Debug:Log (object)
+    </script>
+    <div class="prose">
+      <p><code>Debug.Log</code> 就是 Unity 版的 <code>print()</code>。<code>Start()</code> 會在遊戲開始時被 Unity 自動呼叫一次，你不用自己呼叫它。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>新手村最常卡住的地方</h2>
+      <ul>
+        <li><b>檔名和 class 名不一樣</b>：<code>Hello.cs</code> 裡必須是 <code>public class Hello</code>。不一樣時，把腳本拖到物件上會出現：</li>
+      </ul>
+      <script type="text/x-console">
+! Can't add script component 'Hello' because the script class cannot be found. Make sure that there are no compile errors and that the file name and class name match.
+      </script>
+      <ul>
+        <li><b>Play 模式中改的數值會還原</b>：按 Play 時上方會變色，這時在 Inspector 調的參數，停止後就消失。適合拿來試數值，試好記下來，停止後再改一次。</li>
+        <li><b>Console 有紅字就不能 Play</b>：只要有一個編譯錯誤，整個專案的腳本都不會更新。先把紅字修掉。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>讓 Console 動起來</h2>
+      <div class="prose">
+        <p>1. 把訊息改成印出你的名字。<br>2. 加一個 <code>Update()</code> 方法，在裡面印出 <code>Time.time</code>（遊戲開始後經過的秒數）。按 Play 看看 Console 發生什麼事。</p>
+      </div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="Hello.cs">
+using UnityEngine;
+
+public class Hello : MonoBehaviour
+{
+    void Start()
+    {
+        Debug.Log("我是小明，開始學 Unity！");
+    }
+
+    void Update()
+    {
+        Debug.Log(Time.time);
+    }
+}
+        </script>
+        <p class="explain">Console 會被洗版，因為 <code>Update()</code> 每一幀都會執行，一秒大約 60 次以上。這就是遊戲迴圈，下一關之後會常常用到。</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>新手村驗收</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "檔案叫做 `PlayerMove.cs`，裡面的 class 應該叫什麼？", "o": ["`playerMove`", "`PlayerMove`", "`Player`", "隨便取都可以"], "a": 1, "e": "檔名和 class 名必須完全一樣，大小寫也要一樣。"},
+  {"q": "想看 `Debug.Log` 印出來的文字，要看哪個視窗？", "o": ["Inspector", "Hierarchy", "Console", "Scene"], "a": 2, "e": "Console 視窗負責顯示 Log、警告和錯誤。"},
+  {"q": "在 Play 模式中調整 Inspector 的數值，按下停止後會怎樣？", "o": ["數值會保留下來", "數值會還原成 Play 之前的樣子", "Unity 會跳出錯誤", "腳本會被刪除"], "a": 1, "e": "Play 模式中的修改都是暫時的，停止後就還原。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.01 ======================= -->
+<article class="chapter" id="ch1" data-lv="01" data-short="變數與型別" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.01 · C# 基礎 I</div>
+    <h1>變數與型別</h1>
+    <p class="lede">Python 會自己猜變數是什麼型別，C# 要你先講清楚。多打幾個字，換來的是：打錯型別時，還沒開始玩就會被抓出來。</p>
+  </header>
+
+  <section>
+    <h2>同一段邏輯，兩種寫法</h2>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+hp = 100
+speed = 5.5
+name = "Hero"
+is_alive = True
+
+hp = hp - 10
+print(f"{name} HP: {hp}")
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+int hp = 100;
+float speed = 5.5f;
+string name = "Hero";
+bool isAlive = true;
+
+hp = hp - 10;
+Debug.Log($"{name} HP: {hp}");
+      </script>
+    </div>
+    <div class="prose">
+      <p>你應該已經看到四個差別：</p>
+      <ul>
+        <li>變數前面要寫<b>型別</b>：<code>int</code>、<code>float</code>、<code>string</code>、<code>bool</code>。</li>
+        <li>每一行結尾要加<b>分號</b> <code>;</code>。</li>
+        <li><code>true</code> / <code>false</code> 是<b>小寫</b>。</li>
+        <li>f-string 在 C# 寫成 <code>$"..."</code>，大括號用法一樣。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>遊戲裡最常用的型別</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>型別</th><th>存什麼</th><th>例子</th><th>遊戲裡拿來</th></tr></thead>
+        <tbody>
+          <tr><td><code>int</code></td><td>整數</td><td><code>int coins = 0;</code></td><td>分數、生命數、關卡編號</td></tr>
+          <tr><td><code>float</code></td><td>小數，數字後面加 <code>f</code></td><td><code>float speed = 3.5f;</code></td><td>速度、位置、時間、血量比例</td></tr>
+          <tr><td><code>bool</code></td><td>真或假</td><td><code>bool isGrounded = false;</code></td><td>有沒有落地、遊戲是否結束</td></tr>
+          <tr><td><code>string</code></td><td>文字，用雙引號</td><td><code>string tag = "Player";</code></td><td>名稱、對話、UI 文字</td></tr>
+          <tr><td><code>char</code></td><td>單一字元，用單引號</td><td><code>char grade = 'A';</code></td><td>比較少用</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><b>為什麼 float 要加 f？</b>C# 裡 <code>5.5</code> 預設是 <code>double</code>（更精確的小數），而 Unity 的位置、速度全部用 <code>float</code>。寫 <code>5.5f</code> 是告訴 C#「這是 float」。</p>
+      <p><b>偷懶寫法 <code>var</code></b>：<code>var coins = 0;</code> 會自動推斷成 <code>int</code>。型別還是固定的，只是不用自己寫。初學時建議先把型別寫出來，比較好讀。</p>
+      <p><b>命名習慣</b>：Python 用 <code>is_alive</code>（snake_case），C# 的變數用 <code>isAlive</code>（camelCase），class 和方法用 <code>PlayerController</code>、<code>TakeDamage</code>（PascalCase）。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>運算子</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>用途</th><th>Python</th><th>C#</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td>整數除法</td><td><code>7 // 2</code> → 3</td><td><code>7 / 2</code> → 3</td><td>兩邊都是 int 就會捨去小數</td></tr>
+          <tr><td>一般除法</td><td><code>7 / 2</code> → 3.5</td><td><code>7 / 2f</code> → 3.5</td><td>有一邊是 float 才有小數</td></tr>
+          <tr><td>餘數</td><td><code>7 % 2</code></td><td><code>7 % 2</code></td><td>一樣</td></tr>
+          <tr><td>加一</td><td><code>x += 1</code></td><td><code>x++;</code> 或 <code>x += 1;</code></td><td>C# 有 <code>++</code> 和 <code>--</code></td></tr>
+          <tr><td>且 / 或 / 不是</td><td><code>and</code> <code>or</code> <code>not</code></td><td><code>&amp;&amp;</code> <code>||</code> <code>!</code></td><td>最常打錯的地方</td></tr>
+          <tr><td>相等 / 不相等</td><td><code>==</code> <code>!=</code></td><td><code>==</code> <code>!=</code></td><td>一樣</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>在 Unity 裡試試看</h2>
+    <div class="prose"><p>建立腳本 <code>Stats</code>，掛到任何物件上按 Play。寫在方法外面的變數叫做<b>欄位</b>（field），整個 class 都能用，類似 Python class 裡的 <code>self.coins</code>。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="Stats.cs">
+using UnityEngine;
+
+public class Stats : MonoBehaviour
+{
+    int coins = 0;
+    float moveSpeed = 3.5f;
+    const int MaxHp = 100;   // const：常數，之後不能再改
+
+    void Start()
+    {
+        coins += 5;
+        coins++;
+        float half = MaxHp / 2f;
+
+        Debug.Log($"金幣：{coins}，速度：{moveSpeed}，半血：{half}");
+        Debug.Log(7 / 2);    // 整數除法
+        Debug.Log(7 / 2f);   // 一般除法
+    }
+}
+    </script>
+    <script type="text/x-console">
+金幣：6，速度：3.5，半血：50
+3
+3.5
+    </script>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>型別和符號</h2>
+      <ul>
+        <li><b>小數沒加 f</b>：<code>float speed = 5.5;</code> 會得到這個錯誤：</li>
+      </ul>
+      <script type="text/x-console">
+! Assets/Scripts/Stats.cs(6,25): error CS0664: Literal of type double cannot be implicitly converted to type 'float'; use an 'F' suffix to create a literal of this type
+      </script>
+      <ul>
+        <li><b>忘記分號</b>：錯誤代碼 <code>CS1002: ; expected</code>。括號裡的數字 <code>(6,25)</code> 是「第 6 行第 25 個字」，直接跳過去看。</li>
+        <li><b>寫成 Python 的 True</b>：C# 只認得小寫的 <code>true</code>。</li>
+        <li><b>字串用單引號</b>：<code>'abc'</code> 在 C# 是錯的，單引號只能放一個字元。</li>
+        <li><b>以為 <code>1 / 3</code> 是 0.333</b>：兩個整數相除會得到 0。要寫 <code>1f / 3f</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>角色資料卡</h2>
+      <div class="prose"><p>宣告四個欄位：角色名字 <code>playerName</code>、等級 <code>level</code>、經驗值 <code>exp</code>（小數）、有沒有鑰匙 <code>hasKey</code>。在 <code>Start()</code> 把等級加 1，再用<b>一行</b> <code>Debug.Log</code> 全部印出來。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="PlayerCard.cs">
+using UnityEngine;
+
+public class PlayerCard : MonoBehaviour
+{
+    string playerName = "Hero";
+    int level = 1;
+    float exp = 12.5f;
+    bool hasKey = false;
+
+    void Start()
+    {
+        level++;
+        Debug.Log($"{playerName} Lv.{level} EXP:{exp} 鑰匙:{hasKey}");
+    }
+}
+        </script>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>型別關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "寫 `float speed = 2.5;` 會發生什麼事？", "o": ["正常執行", "變成 2", "編譯錯誤，要寫成 `2.5f`", "執行到一半當機"], "a": 2, "e": "`2.5` 是 double，不能直接放進 float，要加 f。"},
+  {"q": "`int a = 7 / 2;` 執行後 a 是多少？", "o": ["3", "3.5", "4", "編譯錯誤"], "a": 0, "e": "兩個 int 相除會捨去小數，等於 Python 的 `7 // 2`。"},
+  {"q": "Python 的 `and` 在 C# 要寫成什麼？", "o": ["`and`", "`&`", "`||`", "`&&`"], "a": 3, "e": "`&&` 是且，`||` 是或，`!` 是不是。"},
+  {"q": "下列哪一個是正確的 C# bool 值？", "o": ["`true`", "`True`", "`TRUE`", "`\"true\"`（字串）"], "a": 0, "e": "C# 的 bool 只有小寫的 `true` 和 `false`。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.02 ======================= -->
+<article class="chapter" id="ch2" data-lv="02" data-short="條件與迴圈" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.02 · C# 基礎 II</div>
+    <h1>條件判斷與迴圈</h1>
+    <p class="lede">邏輯和 Python 一模一樣，差在外觀：Python 靠縮排分區塊，C# 靠大括號 <code>{ }</code>，條件要放在小括號 <code>( )</code> 裡。</p>
+  </header>
+
+  <section>
+    <h2>if / else 與 for</h2>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+if hp <= 0:
+    print("Game Over")
+elif hp < 30:
+    print("危險！")
+else:
+    print("還很健康")
+
+for i in range(3):
+    print(i)
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+if (hp <= 0)
+{
+    Debug.Log("Game Over");
+}
+else if (hp < 30)
+{
+    Debug.Log("危險！");
+}
+else
+{
+    Debug.Log("還很健康");
+}
+
+for (int i = 0; i < 3; i++)
+{
+    Debug.Log(i);
+}
+      </script>
+    </div>
+    <div class="prose">
+      <p><code>elif</code> 在 C# 是 <code>else if</code>。C# 的縮排只是為了好讀，真正決定區塊的是大括號。</p>
+      <p><b>for 的三段</b>：<code>for (起始; 條件; 每圈結束後做的事)</code>。<code>for (int i = 0; i &lt; 3; i++)</code> 就是 Python 的 <code>range(3)</code>：從 0 開始，小於 3 就繼續，每圈加 1。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>foreach、while 和 switch</h2>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+for item in items:
+    print(item)
+
+while hp > 0:
+    hp -= 10
+
+msg = "活著" if hp > 0 else "倒下"
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+foreach (string item in items)
+{
+    Debug.Log(item);
+}
+
+while (hp > 0)
+{
+    hp -= 10;
+}
+
+string msg = hp > 0 ? "活著" : "倒下";
+      </script>
+    </div>
+    <div class="prose"><p>最後一行是<b>三元運算子</b>：<code>條件 ? 成立時 : 不成立時</code>。<code>switch</code> 適合「一個值對應很多種情況」，例如武器種類：</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="switch 範例">
+int damage;
+switch (weapon)
+{
+    case "sword":
+        damage = 10;
+        break;
+    case "bow":
+        damage = 6;
+        break;
+    default:
+        damage = 1;
+        break;
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>遊戲例子：連續受傷</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="DamageTest.cs">
+using UnityEngine;
+
+public class DamageTest : MonoBehaviour
+{
+    void Start()
+    {
+        int[] damages = { 12, 30, 8, 25 };
+        int hp = 60;
+
+        foreach (int d in damages)
+        {
+            hp -= d;
+            if (hp <= 0)
+            {
+                Debug.Log("玩家倒下了");
+                break;
+            }
+            Debug.Log($"受到 {d} 傷害，剩下 {hp}");
+        }
+    }
+}
+    </script>
+    <script type="text/x-console">
+受到 12 傷害，剩下 48
+受到 30 傷害，剩下 18
+受到 8 傷害，剩下 10
+玩家倒下了
+    </script>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>大括號和迴圈</h2>
+      <ul>
+        <li><b>if 後面多一個分號</b>：<code>if (hp &lt;= 0);</code> 分號會讓 if 直接結束，下面的大括號<b>永遠會執行</b>，而且不會報錯。</li>
+        <li><b>把 <code>==</code> 寫成 <code>=</code></b>：<code>if (hp = 0)</code> 在 C# 會編譯錯誤，看到 <code>CS0029</code> 先檢查這裡。</li>
+        <li><b>在 <code>Update()</code> 裡寫 <code>while</code> 等待事情發生</b>：例如 <code>while (!isGrounded) { }</code>。Unity 會整個卡死，只能強制關閉。<code>Update()</code> 本身每幀都會跑，它已經是一個迴圈了；要等待請用 if 判斷，或之後會教的協程。</li>
+        <li><b>switch 的 case 忘了 <code>break</code></b>：C# 不允許自動掉到下一個 case，會出現 <code>CS0163</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>FizzBuzz 遊戲版</h2>
+      <div class="prose"><p>用 <code>for</code> 從 1 跑到 15。3 的倍數印 <code>"金幣"</code>，5 的倍數印 <code>"寶箱"</code>，同時是 3 和 5 的倍數印 <code>"大獎"</code>，其他印數字本身。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="Loot.cs">
+using UnityEngine;
+
+public class Loot : MonoBehaviour
+{
+    void Start()
+    {
+        for (int i = 1; i <= 15; i++)
+        {
+            if (i % 15 == 0)
+            {
+                Debug.Log("大獎");
+            }
+            else if (i % 3 == 0)
+            {
+                Debug.Log("金幣");
+            }
+            else if (i % 5 == 0)
+            {
+                Debug.Log("寶箱");
+            }
+            else
+            {
+                Debug.Log(i);
+            }
+        }
+    }
+}
+        </script>
+        <p class="explain">15 的判斷要放最前面，不然 15 會先被「3 的倍數」接走。</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>流程控制</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "`for (int i = 0; i < 5; i++)` 會執行幾次？", "o": ["4 次", "5 次", "6 次", "無限次"], "a": 1, "e": "i 是 0、1、2、3、4，共 5 次。"},
+  {"q": "在 `Update()` 裡寫 `while (true) { }` 會怎樣？", "o": ["每一幀跑一次", "跑一陣子會自動跳出", "Unity 編輯器卡住沒有回應", "編譯錯誤"], "a": 2, "e": "無限迴圈會讓這一幀永遠結束不了，整個編輯器都會凍結。"},
+  {"q": "Python 的 `for item in items:` 最接近 C# 的哪一種寫法？", "o": ["`foreach (var item in items)`", "`for (item in items)`", "`while (items)`", "`switch (items)`"], "a": 0, "e": "foreach 會依序取出集合裡的每一個元素。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.03 ======================= -->
+<article class="chapter" id="ch3" data-lv="03" data-short="陣列、方法、類別" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.03 · C# 基礎 III</div>
+    <h1>陣列、List、方法與類別</h1>
+    <p class="lede">這一關學會怎麼裝一堆資料、怎麼把程式包成方法，以及 class 的寫法。學完這關，就能讀懂大部分的 Unity 腳本。</p>
+  </header>
+
+  <section>
+    <h2>陣列和 List</h2>
+    <div class="prose">
+      <p><b>陣列</b>長度固定：<code>int[] scores = new int[3];</code> 或 <code>string[] names = { "Ann", "Bo" };</code>，長度用 <code>.Length</code>。</p>
+      <p><b>List</b> 可以增減，最像 Python 的 list。要先在檔案最上面加 <code>using System.Collections.Generic;</code>。尖括號裡寫「裝什麼型別」：<code>List&lt;string&gt;</code> 只能裝字串。</p>
+    </div>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+items = ["劍", "盾"]
+items.append("藥水")
+print(len(items))
+items.remove("盾")
+print("劍" in items)
+print(items[0])
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+List<string> items = new List<string> { "劍", "盾" };
+items.Add("藥水");
+Debug.Log(items.Count);
+items.Remove("盾");
+Debug.Log(items.Contains("劍"));
+Debug.Log(items[0]);
+      </script>
+    </div>
+    <div class="prose"><p>Python 的 dict 對應 C# 的 <code>Dictionary&lt;string, int&gt;</code>，例如 <code>inventory["potion"] = 3;</code>。</p></div>
+  </section>
+
+  <section>
+    <h2>方法（函式）</h2>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+def heal(hp, amount):
+    return min(hp + amount, 100)
+
+def say_hi():
+    print("Hi")
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+int Heal(int hp, int amount)
+{
+    return Mathf.Min(hp + amount, 100);
+}
+
+void SayHi()
+{
+    Debug.Log("Hi");
+}
+      </script>
+    </div>
+    <div class="prose">
+      <p>方法名稱前面寫的是<b>回傳型別</b>：<code>int Heal(...)</code> 會回傳 int。<code>void</code> 代表不回傳任何東西。每個參數也要寫型別。</p>
+      <p><code>Mathf</code> 是 Unity 的數學工具箱：<code>Mathf.Min</code>、<code>Mathf.Max</code>、<code>Mathf.Abs</code>、<code>Mathf.Clamp</code> 之後會一直用到。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>類別與物件</h2>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python">
+class Enemy:
+    def __init__(self, name, hp):
+        self.name = name
+        self.hp = hp
+
+    def take_damage(self, amount):
+        self.hp -= amount
+        if self.hp <= 0:
+            print(f"{self.name} 被打倒了")
+
+slime = Enemy("史萊姆", 20)
+slime.take_damage(25)
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C#">
+public class Enemy
+{
+    public string name;
+    public int hp;
+
+    public Enemy(string name, int hp)
+    {
+        this.name = name;
+        this.hp = hp;
+    }
+
+    public void TakeDamage(int amount)
+    {
+        hp -= amount;
+        if (hp <= 0)
+        {
+            Debug.Log($"{name} 被打倒了");
+        }
+    }
+}
+
+Enemy slime = new Enemy("史萊姆", 20);
+slime.TakeDamage(25);
+      </script>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Python</th><th>C#</th><th>說明</th></tr></thead>
+        <tbody>
+          <tr><td><code>__init__</code></td><td>和 class 同名的方法</td><td>叫做<b>建構子</b>，建立物件時執行</td></tr>
+          <tr><td><code>self</code></td><td><code>this</code></td><td>C# 大多可以省略，只有名稱衝突時才要寫</td></tr>
+          <tr><td><code>Enemy(...)</code></td><td><code>new Enemy(...)</code></td><td>建立物件要加 <code>new</code></td></tr>
+          <tr><td>名字前加 <code>_</code> 當作私有</td><td><code>private</code></td><td>C# 會真的禁止外部存取</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p><b>public 和 private</b>：<code>public</code> 的成員其他腳本可以用，<code>private</code> 只有自己 class 裡能用。<b>沒寫的話預設是 private</b>。好習慣是：能 private 就 private，需要給別人用的才 public。</p>
+      <p>重點預告：在 Unity 裡，掛在物件上的腳本<b>不能用 new 建立</b>，下一關會說明原因。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>集合和方法</h2>
+      <ul>
+        <li><b>索引超出範圍</b>：3 個元素的陣列，最後一個是 <code>[2]</code>。存取 <code>[3]</code> 會得到 <code>IndexOutOfRangeException</code>（List 則是 <code>ArgumentOutOfRangeException</code>）。</li>
+        <li><b>陣列和 List 的長度屬性搞混</b>：陣列用 <code>.Length</code>，List 用 <code>.Count</code>。</li>
+        <li><b>忘了 using</b>：用了 <code>List</code> 卻沒寫 <code>using System.Collections.Generic;</code>，會看到 <code>CS0246: The type or namespace name 'List&lt;&gt;' could not be found</code>。</li>
+        <li><b>有回傳型別卻沒 return</b>：<code>int Heal()</code> 裡某條路徑沒有 return，會看到 <code>CS0161: not all code paths return a value</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>還有幾隻怪活著？</h2>
+      <div class="prose"><p>寫一個方法 <code>int CountAlive(List&lt;int&gt; hpList)</code>，回傳血量大於 0 的數量。在 <code>Start()</code> 用 <code>{ 10, 0, 5, -3, 8 }</code> 測試，應該印出 3。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="EnemyCounter.cs">
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EnemyCounter : MonoBehaviour
+{
+    void Start()
+    {
+        List<int> hpList = new List<int> { 10, 0, 5, -3, 8 };
+        Debug.Log(CountAlive(hpList));
+    }
+
+    int CountAlive(List<int> hpList)
+    {
+        int count = 0;
+        foreach (int hp in hpList)
+        {
+            if (hp > 0)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+}
+        </script>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>資料與結構</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "要取得 `List<int>` 裡有幾個元素，要用什麼？", "o": ["`.Length`", "`len()`", "`.Count`", "`.Size()`"], "a": 2, "e": "List 用 `.Count`，陣列用 `.Length`。"},
+  {"q": "方法宣告成 `void Jump()` 代表什麼？", "o": ["這個方法不回傳任何值", "這個方法回傳 0", "這個方法回傳 bool", "這個方法不能被呼叫"], "a": 0, "e": "void 就是「沒有回傳值」。"},
+  {"q": "class 裡的欄位沒寫 public 也沒寫 private，預設是？", "o": ["public", "private", "protected", "static"], "a": 1, "e": "C# 的 class 成員預設是 private。"},
+  {"q": "Python 的 `self` 對應到 C# 的哪個關鍵字？", "o": ["`base`", "`me`", "`new`", "`this`"], "a": 3, "e": "`this` 代表目前這個物件，大多數時候可以省略。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.04 ======================= -->
+<article class="chapter" id="ch4" data-lv="04" data-short="Unity 核心觀念" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.04 · Unity 核心</div>
+    <h1>GameObject、元件與生命週期</h1>
+    <p class="lede">Unity 不是從 main 開始一路往下跑。它是「物件身上掛元件，Unity 在對的時機呼叫元件的方法」。理解這一點，後面全部都會變簡單。</p>
+  </header>
+
+  <section>
+    <h2>GameObject 是空盒子，元件才是功能</h2>
+    <div class="prose">
+      <p>Hierarchy 裡的每一個東西都是 <b>GameObject</b>，它本身什麼都不會。功能來自掛在身上的<b>元件（Component）</b>：</p>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>元件</th><th>負責</th></tr></thead>
+        <tbody>
+          <tr><td><code>Transform</code></td><td>位置、旋轉、縮放。每個物件一定有</td></tr>
+          <tr><td><code>SpriteRenderer</code></td><td>畫出 2D 圖片</td></tr>
+          <tr><td><code>Rigidbody2D</code></td><td>受重力、有速度，讓物理引擎接管</td></tr>
+          <tr><td><code>BoxCollider2D</code></td><td>碰撞的形狀</td></tr>
+          <tr><td>你寫的腳本</td><td>遊戲邏輯。只要繼承 <code>MonoBehaviour</code> 就能當元件掛上去</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose"><p>所以腳本的 class 一定寫成 <code>public class Player : MonoBehaviour</code>，冒號是「繼承」。也因為腳本是元件，<b>不能用 <code>new Player()</code> 建立</b>，要用拖曳或 <code>AddComponent&lt;Player&gt;()</code> 掛到物件上。</p></div>
+  </section>
+
+  <section>
+    <h2>Unity 什麼時候呼叫你的方法</h2>
+    <div class="flow" aria-label="MonoBehaviour 生命週期">
+      <span class="step">Awake</span><span class="arrow">→</span>
+      <span class="step">OnEnable</span><span class="arrow">→</span>
+      <span class="step">Start</span><span class="arrow">→</span>
+      <span class="loop">
+        <span class="loop-label">每幀重複</span>
+        <span class="step">FixedUpdate</span><span class="arrow">→</span>
+        <span class="step">Update</span><span class="arrow">→</span>
+        <span class="step">LateUpdate</span>
+      </span>
+      <span class="arrow">→</span>
+      <span class="step">OnDisable</span><span class="arrow">→</span>
+      <span class="step">OnDestroy</span>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>方法</th><th>什麼時候</th><th>適合做</th></tr></thead>
+        <tbody>
+          <tr><td><code>Awake()</code></td><td>物件一載入就執行，最早</td><td>用 <code>GetComponent</code> 抓自己身上的元件</td></tr>
+          <tr><td><code>Start()</code></td><td>第一次 Update 之前，一次</td><td>需要其他物件已經準備好的初始化</td></tr>
+          <tr><td><code>Update()</code></td><td>每一幀，次數依影格率而定</td><td>讀取輸入、計時器、一般邏輯</td></tr>
+          <tr><td><code>FixedUpdate()</code></td><td>固定間隔，預設每 0.02 秒</td><td>操作 <code>Rigidbody2D</code> 的物理移動</td></tr>
+          <tr><td><code>LateUpdate()</code></td><td>所有 Update 跑完之後</td><td>攝影機跟隨角色</td></tr>
+          <tr><td><code>OnDestroy()</code></td><td>物件被刪除時</td><td>收尾、取消訂閱</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inspector 欄位與 GetComponent</h2>
+    <div class="prose"><p>加上 <code>[SerializeField]</code> 的 private 欄位會出現在 Inspector，可以不改程式就調整數值。<code>public</code> 欄位也會出現，但其他腳本也能亂改它，所以一般建議 <code>[SerializeField] private</code>。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="Spinner.cs">
+using UnityEngine;
+
+public class Spinner : MonoBehaviour
+{
+    [SerializeField] private float speed = 90f;       // 每秒轉幾度
+    [SerializeField] private Color tint = Color.cyan;
+
+    private SpriteRenderer sr;
+
+    void Awake()
+    {
+        // 抓同一個物件身上的 SpriteRenderer，存起來重複使用
+        sr = GetComponent<SpriteRenderer>();
+    }
+
+    void Start()
+    {
+        sr.color = tint;
+    }
+
+    void Update()
+    {
+        // transform（小寫）是自己這個物件的 Transform
+        transform.Rotate(0f, 0f, speed * Time.deltaTime);
+    }
+}
+    </script>
+    <div class="prose">
+      <p>試法：Hierarchy 右鍵 → <span class="path">2D Object → Sprites → Square</span>，把 <code>Spinner</code> 拖上去，按 Play。在 Inspector 改 Speed 看看。</p>
+      <p>想用<b>別的物件</b>，宣告 <code>[SerializeField] private Transform target;</code>，再到 Inspector 把那個物件拖進欄位。這是 Unity 最常見的「接線」方式。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>沒報錯但不會動</h2>
+      <ul>
+        <li><b>方法名稱大小寫打錯</b>：<code>void update()</code> 或 <code>void start()</code> 不會報錯，但 Unity 找不到它，所以<b>永遠不會執行</b>。</li>
+        <li><b>NullReferenceException</b>：最常見的執行錯誤，代表你用了一個空的參考。通常是 Inspector 欄位忘了拖東西進去，或物件身上根本沒有那個元件。雙擊錯誤會跳到出錯的那一行。</li>
+      </ul>
+      <script type="text/x-console">
+! NullReferenceException: Object reference not set to an instance of an object
+Spinner.Start () (at Assets/Scripts/Spinner.cs:16)
+      </script>
+      <ul>
+        <li><b>改了程式裡的預設值卻沒效果</b>：欄位一旦出現在 Inspector，<b>Inspector 的值優先</b>。在元件右上角 ⋮ 選 Reset 才會回到程式裡的預設值。</li>
+        <li><b>每幀呼叫 GetComponent</b>：可以用，但浪費效能。在 <code>Awake()</code> 抓一次存起來。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>閃爍方塊</h2>
+      <div class="prose"><p>寫一個 <code>Blinker</code> 腳本：每 <code>interval</code> 秒（預設 0.5，可在 Inspector 調）切換一次 <code>SpriteRenderer.enabled</code>，讓方塊一閃一閃。提示：用一個 float 計時器累加 <code>Time.deltaTime</code>。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="Blinker.cs">
+using UnityEngine;
+
+public class Blinker : MonoBehaviour
+{
+    [SerializeField] private float interval = 0.5f;
+
+    private SpriteRenderer sr;
+    private float timer;
+
+    void Awake()
+    {
+        sr = GetComponent<SpriteRenderer>();
+    }
+
+    void Update()
+    {
+        timer += Time.deltaTime;
+        if (timer >= interval)
+        {
+            sr.enabled = !sr.enabled;
+            timer = 0f;
+        }
+    }
+}
+        </script>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>核心觀念</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "用 `Rigidbody2D` 做物理移動，最適合放在哪個方法？", "o": ["`Start()`", "`Update()`", "`FixedUpdate()`", "`Awake()`"], "a": 2, "e": "物理引擎以固定間隔計算，FixedUpdate 和它同步。"},
+  {"q": "想讓 private 欄位出現在 Inspector，要加什麼？", "o": ["`[SerializeField]`", "`[Inspector]`", "`public static`", "`[Show]`"], "a": 0, "e": "`[SerializeField] private float speed;` 是最推薦的寫法。"},
+  {"q": "把 `void Update()` 打成 `void update()` 會發生什麼？", "o": ["編譯錯誤", "正常每幀執行", "只執行一次", "不會報錯，但 Unity 不會呼叫它"], "a": 3, "e": "Unity 是用名稱找方法的，大小寫不對就找不到，而且不會提醒你。"},
+  {"q": "`GetComponent` 比較好的用法是？", "o": ["每幀在 Update 裡呼叫", "在 Awake 呼叫一次，存到欄位", "用 new 建立元件", "只能在 OnDestroy 呼叫"], "a": 1, "e": "抓一次存起來，之後直接用欄位。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.05 ======================= -->
+<article class="chapter" id="ch5" data-lv="05" data-short="輸入與移動" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.05 · 輸入與移動</div>
+    <h1>讀鍵盤、讓角色動起來</h1>
+    <p class="lede">這一關把鍵盤輸入轉成移動。最重要的觀念只有一個：移動量要乘上 <code>Time.deltaTime</code>。</p>
+  </header>
+
+  <section>
+    <h2>位置與向量</h2>
+    <div class="prose">
+      <p>物件位置是 <code>transform.position</code>，型別是 <code>Vector3</code>（x, y, z）。2D 遊戲只用 x 和 y，z 通常是 0。Unity 的單位是「公尺」，預設一張 100 像素的圖等於 1 單位。</p>
+      <p><code>Vector2</code> 是只有 x、y 的向量，可以自動轉成 <code>Vector3</code>。常用的有 <code>Vector2.right</code>（1, 0）、<code>Vector2.up</code>（0, 1）。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>為什麼要乘 Time.deltaTime</h2>
+    <div class="prose">
+      <p><code>Time.deltaTime</code> 是「上一幀花了幾秒」。60 FPS 時大約 0.0167，144 FPS 時大約 0.0069。</p>
+      <p>如果每幀固定移動 0.1，144Hz 螢幕的玩家會跑得比 60Hz 快 2.4 倍。寫成 <code>speed * Time.deltaTime</code>，<code>speed</code> 的意思就變成「每秒移動幾單位」，任何電腦都一樣快。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>用 Input System 讀鍵盤</h2>
+    <div class="prose"><p>Unity 6 新專案預設使用新版 <b>Input System</b>。最直接的寫法是讀 <code>Keyboard.current</code>：</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="SimpleMove.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class SimpleMove : MonoBehaviour
+{
+    [SerializeField] private float speed = 5f;
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb == null) return;   // 沒有接鍵盤時避免出錯
+
+        float x = 0f;
+        float y = 0f;
+        if (kb.aKey.isPressed || kb.leftArrowKey.isPressed)  x -= 1f;
+        if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) x += 1f;
+        if (kb.sKey.isPressed || kb.downArrowKey.isPressed)  y -= 1f;
+        if (kb.wKey.isPressed || kb.upArrowKey.isPressed)    y += 1f;
+
+        // normalized：讓斜走的速度和直走一樣
+        Vector2 dir = new Vector2(x, y).normalized;
+        transform.Translate(dir * speed * Time.deltaTime);
+    }
+}
+    </script>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>屬性</th><th>什麼時候是 true</th><th>用在</th></tr></thead>
+        <tbody>
+          <tr><td><code>isPressed</code></td><td>按住期間每一幀</td><td>移動、蓄力</td></tr>
+          <tr><td><code>wasPressedThisFrame</code></td><td>剛按下的那一幀</td><td>跳躍、射擊、開選單</td></tr>
+          <tr><td><code>wasReleasedThisFrame</code></td><td>剛放開的那一幀</td><td>放開蓄力攻擊</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>另外兩種寫法</h2>
+    <h3>用專案內建的 Input Actions（支援手把）</h3>
+    <div class="prose"><p>Unity 6 範本附了 <span class="path">InputSystem_Actions</span>，裡面已經設定好 <b>Move</b>、<b>Jump</b> 等動作，同時支援鍵盤和手把：</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="ActionMove.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class ActionMove : MonoBehaviour
+{
+    [SerializeField] private float speed = 5f;
+    private InputAction moveAction;
+
+    void Awake()
+    {
+        moveAction = InputSystem.actions.FindAction("Move");
+    }
+
+    void Update()
+    {
+        Vector2 move = moveAction.ReadValue<Vector2>();
+        transform.Translate(move * speed * Time.deltaTime);
+    }
+}
+    </script>
+    <h3>舊版 Input Manager（很多教學影片用這個）</h3>
+    <script type="text/x-code" data-lang="csharp" data-file="舊版寫法">
+float x = Input.GetAxisRaw("Horizontal");   // A/D 或 ←/→，回傳 -1、0、1
+float y = Input.GetAxisRaw("Vertical");
+if (Input.GetKeyDown(KeyCode.Space))
+{
+    Debug.Log("跳！");
+}
+    </script>
+    <div class="prose"><p>如果照舊教學寫，按 Play 出現下面的錯誤，到 <span class="path">Edit → Project Settings → Player → Other Settings → Active Input Handling</span> 改成 <b>Both</b>，Unity 會重新啟動。</p></div>
+    <script type="text/x-console">
+! InvalidOperationException: You are trying to read Input using the UnityEngine.Input class, but you have switched active Input handling to Input System package in Player Settings.
+    </script>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>移動手感怪怪的</h2>
+      <ul>
+        <li><b>忘了乘 <code>Time.deltaTime</code></b>：角色快到看不見，而且每台電腦速度不同。</li>
+        <li><b>斜走比較快</b>：(1, 1) 的長度是 1.414，所以要 <code>.normalized</code>。</li>
+        <li><b>找不到 Keyboard</b>：<code>CS0103: The name 'Keyboard' does not exist</code>，代表少了 <code>using UnityEngine.InputSystem;</code>。</li>
+        <li><b>在 FixedUpdate 判斷 <code>wasPressedThisFrame</code></b>：FixedUpdate 不是每幀都跑，會漏掉按鍵。輸入一律在 <code>Update()</code> 讀。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>不准跑出畫面</h2>
+      <div class="prose"><p>讓 <code>SimpleMove</code> 的角色 x 只能在 -8 到 8 之間，y 只能在 -4 到 4 之間。提示：先移動，再用 <code>Mathf.Clamp(值, 最小, 最大)</code> 把位置夾回來。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="SimpleMove.cs（Update 最後加上）">
+// 接在 transform.Translate(...) 之後
+Vector3 p = transform.position;
+p.x = Mathf.Clamp(p.x, -8f, 8f);
+p.y = Mathf.Clamp(p.y, -4f, 4f);
+transform.position = p;
+        </script>
+        <p class="explain"><code>transform.position.x = 5f;</code> 不能直接寫（會出現 CS1612），要先複製到變數、改完再整個指定回去。</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>輸入與移動</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "為什麼移動量要乘 `Time.deltaTime`？", "o": ["讓遊戲跑得更快", "讓移動速度不受影格率影響", "物理引擎規定的", "可以省記憶體"], "a": 1, "e": "乘上每幀經過的秒數後，速度就變成每秒幾單位。"},
+  {"q": "想偵測「這一幀剛按下空白鍵」，要用哪一個？", "o": ["`Keyboard.current.spaceKey.isPressed`", "`Keyboard.current.spaceKey.wasReleasedThisFrame`", "`Keyboard.current.spaceKey.wasPressedThisFrame`", "`Keyboard.current.spaceKey.value`"], "a": 2, "e": "wasPressedThisFrame 只在按下的那一幀是 true，適合跳躍。"},
+  {"q": "斜著走比直走快，原因和解法是？", "o": ["向量長度變成約 1.414，用 `.normalized`", "deltaTime 算錯，改用 fixedDeltaTime", "鍵盤延遲，改用手把", "這是正常的，不用處理"], "a": 0, "e": "正規化會把向量長度變成 1，方向不變。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.06 ======================= -->
+<article class="chapter" id="ch6" data-lv="06" data-short="2D 物理與碰撞" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.06 · 2D 物理</div>
+    <h1>重力、跳躍與碰撞</h1>
+    <p class="lede">平台遊戲的手感來自物理。這一關讓角色受重力、站在地上、按空白鍵跳起來，並且知道自己撞到了什麼。</p>
+  </header>
+
+  <section>
+    <h2>兩個元件：Rigidbody2D 和 Collider2D</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>設定</th><th>意思</th><th>用在</th></tr></thead>
+        <tbody>
+          <tr><td>Body Type: Dynamic</td><td>受重力和碰撞推動</td><td>玩家、會掉落的箱子</td></tr>
+          <tr><td>Body Type: Kinematic</td><td>不受重力，由程式控制位置</td><td>移動平台、巡邏的敵人</td></tr>
+          <tr><td>Body Type: Static</td><td>完全不動</td><td>地板、牆壁</td></tr>
+          <tr><td>Gravity Scale</td><td>重力倍率，平台遊戲常設 3 到 4</td><td>讓跳躍不會飄</td></tr>
+          <tr><td>Constraints → Freeze Rotation Z</td><td>不讓物件被撞得旋轉</td><td>玩家一定要勾</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose"><p>Collider2D 決定碰撞形狀：<code>BoxCollider2D</code>、<code>CircleCollider2D</code>、<code>CapsuleCollider2D</code>（角色最常用，不容易卡在地板接縫）。勾選 <b>Is Trigger</b> 後就不會擋住東西，只會「偵測到有東西進來」。</p></div>
+  </section>
+
+  <section>
+    <h2>平台角色：移動和跳躍</h2>
+    <div class="prose"><p>有了 Rigidbody2D，就不要再用 <code>transform.Translate</code>，改成設定速度 <code>linearVelocity</code>（Unity 6 的名稱，舊版叫 <code>velocity</code>）。輸入在 Update 讀，物理在 FixedUpdate 做。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="PlatformerMove.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+[RequireComponent(typeof(Rigidbody2D))]
+public class PlatformerMove : MonoBehaviour
+{
+    [SerializeField] private float moveSpeed = 6f;
+    [SerializeField] private float jumpForce = 12f;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundRadius = 0.15f;
+    [SerializeField] private LayerMask groundLayer;
+
+    private Rigidbody2D rb;
+    private float inputX;
+    private bool jumpQueued;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+    }
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb == null) return;
+
+        inputX = 0f;
+        if (kb.aKey.isPressed) inputX -= 1f;
+        if (kb.dKey.isPressed) inputX += 1f;
+
+        if (kb.spaceKey.wasPressedThisFrame && IsGrounded())
+        {
+            jumpQueued = true;   // 先記下來，交給 FixedUpdate 處理
+        }
+    }
+
+    void FixedUpdate()
+    {
+        rb.linearVelocity = new Vector2(inputX * moveSpeed, rb.linearVelocity.y);
+
+        if (jumpQueued)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            jumpQueued = false;
+        }
+    }
+
+    bool IsGrounded()
+    {
+        // 在腳底畫一個小圓，看有沒有碰到 Ground 圖層
+        return Physics2D.OverlapCircle(groundCheck.position, groundRadius, groundLayer) != null;
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (groundCheck == null) return;
+        Gizmos.DrawWireSphere(groundCheck.position, groundRadius);
+    }
+}
+    </script>
+    <h3>場景設定步驟</h3>
+    <ol class="steps-list">
+      <li><div>右上角 <b>Layers → Edit Layers</b>，新增一個 Layer 叫 <code>Ground</code>。地板物件的 Layer 改成 Ground，並加上 BoxCollider2D。</div></li>
+      <li><div>玩家加上 Rigidbody2D（勾 Freeze Rotation Z）和 CapsuleCollider2D，再掛 <code>PlatformerMove</code>。</div></li>
+      <li><div>在玩家底下建立空的子物件 <code>GroundCheck</code>，移到腳底。拖進腳本的 Ground Check 欄位。</div></li>
+      <li><div>Ground Layer 欄位選 Ground。選取玩家時，Scene 視窗會畫出檢測圓，確認它剛好碰到地面。</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>撞到東西：Collision 和 Trigger</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>事件</th><th>條件</th><th>效果</th><th>例子</th></tr></thead>
+        <tbody>
+          <tr><td><code>OnCollisionEnter2D(Collision2D c)</code></td><td>兩邊都不是 Trigger</td><td>會被擋住、彈開</td><td>踩敵人、撞牆</td></tr>
+          <tr><td><code>OnTriggerEnter2D(Collider2D other)</code></td><td>至少一邊勾 Is Trigger</td><td>穿過去，只觸發事件</td><td>金幣、終點、陷阱區</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose"><p>兩種事件都要求<b>至少一方有 Rigidbody2D</b>。另外還有 <code>Stay</code>（持續接觸）和 <code>Exit</code>（離開）版本。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="Pickup.cs">
+using UnityEngine;
+
+public class Pickup : MonoBehaviour
+{
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            Debug.Log("玩家撿到了！");
+            Destroy(gameObject);
+        }
+    }
+}
+    </script>
+    <div class="prose">
+      <p><b>Tag 和 Layer 的分工</b>：Tag 回答「這是什麼」，用 <code>CompareTag("Player")</code> 判斷。Layer 決定「誰跟誰會碰撞」和射線檢測範圍，在 <span class="path">Project Settings → Physics 2D → Layer Collision Matrix</span> 設定。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>碰撞沒反應、角色亂翻</h2>
+      <ul>
+        <li><b>寫成 3D 版本</b>：<code>OnTriggerEnter(Collider other)</code> 是 3D 物理用的，2D 物件永遠不會呼叫。名稱和參數都要有 <b>2D</b>。</li>
+        <li><b>參數型別寫反</b>：Trigger 收 <code>Collider2D</code>，Collision 收 <code>Collision2D</code>。</li>
+        <li><b>雙方都沒有 Rigidbody2D</b>：事件不會觸發。金幣可以不加，但玩家一定要有。</li>
+        <li><b>角色一跳就翻倒</b>：忘了勾 Freeze Rotation Z。</li>
+        <li><b>角色黏在牆上掉不下來</b>：建立 Physics Material 2D，Friction 設 0，放到玩家的 Collider 上。</li>
+        <li><b>用 transform.position 移動 Dynamic 剛體</b>：等於瞬間移動，容易穿牆，也會和物理引擎打架。</li>
+        <li><b>舊教學的 <code>rb.velocity</code></b>：Unity 6 會出現過時警告，改成 <code>rb.linearVelocity</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>二段跳</h2>
+      <div class="prose"><p>讓角色在空中可以再跳一次，落地後重置次數。提示：用 <code>int jumpsLeft</code>，在地面上時設回 2，每跳一次減 1。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="PlatformerMove.cs（修改 Update）">
+[SerializeField] private int maxJumps = 2;
+private int jumpsLeft;
+
+void Update()
+{
+    var kb = Keyboard.current;
+    if (kb == null) return;
+
+    inputX = 0f;
+    if (kb.aKey.isPressed) inputX -= 1f;
+    if (kb.dKey.isPressed) inputX += 1f;
+
+    // 落地且正在下降或靜止時，重置跳躍次數
+    if (IsGrounded() && rb.linearVelocity.y <= 0.01f)
+    {
+        jumpsLeft = maxJumps;
+    }
+
+    if (kb.spaceKey.wasPressedThisFrame && jumpsLeft > 0)
+    {
+        jumpQueued = true;
+        jumpsLeft--;
+    }
+}
+        </script>
+        <p class="explain">加上 <code>linearVelocity.y &lt;= 0.01f</code> 是為了避免剛起跳的那幾幀還碰著地面，次數又被補滿。</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>物理關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "2D 觸發事件的正確寫法是？", "o": ["`void OnTriggerEnter(Collider other)`", "`void OnTriggerEnter2D(Collision2D other)`", "`void OnTrigger2D(Collider2D other)`", "`void OnTriggerEnter2D(Collider2D other)`"], "a": 3, "e": "名稱要有 2D，參數是 Collider2D。"},
+  {"q": "兩個物件都勾了 Is Trigger，而且都沒有 Rigidbody2D，碰在一起時會？", "o": ["觸發 OnTriggerEnter2D", "觸發 OnCollisionEnter2D", "什麼事件都不會觸發", "兩個都會被刪除"], "a": 2, "e": "至少要有一方帶 Rigidbody2D，物理引擎才會回報事件。"},
+  {"q": "角色一跳就翻滾倒下，應該怎麼處理？", "o": ["在 Rigidbody2D 勾 Freeze Rotation Z", "把 Gravity Scale 設成 0", "拿掉 Collider", "改用 Static"], "a": 0, "e": "鎖住 Z 軸旋轉，角色就會一直保持直立。"},
+  {"q": "Unity 6 設定 2D 剛體速度要用哪個屬性？", "o": ["`speed`", "`linearVelocity`", "`velocity2D`", "`force`"], "a": 1, "e": "Unity 6 把 velocity 改名為 linearVelocity。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.07 ======================= -->
+<article class="chapter" id="ch7" data-lv="07" data-short="Prefab 與生成" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.07 · Prefab 與生成</div>
+    <h1>用 Prefab 量產子彈、金幣和敵人</h1>
+    <p class="lede">遊戲裡大量重複出現的東西不會一個一個手擺。做好一個藍圖（Prefab），再用程式在需要的時候生出來。</p>
+  </header>
+
+  <section>
+    <h2>Prefab 是物件的藍圖</h2>
+    <div class="prose">
+      <ul>
+        <li><b>建立</b>：在 Hierarchy 做好一個物件（圖片、Collider、腳本都裝好），把它<b>拖到 Project 視窗</b>，就變成 Prefab，圖示是藍色方塊。</li>
+        <li><b>編輯</b>：雙擊 Prefab 進入編輯模式，改完之後，場景中所有用這個 Prefab 的物件都會一起更新。</li>
+        <li><b>覆寫</b>：在場景中單獨修改某一個實例，Inspector 會顯示粗體。按 Overrides → Apply All 可以寫回 Prefab。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Instantiate 生成、Destroy 刪除</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="Shooter.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class Shooter : MonoBehaviour
+{
+    [SerializeField] private GameObject bulletPrefab;
+    [SerializeField] private Transform firePoint;
+    [SerializeField] private float fireRate = 0.2f;   // 每發間隔秒數
+
+    private float nextFireTime;
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb == null) return;
+
+        if (kb.jKey.isPressed && Time.time >= nextFireTime)
+        {
+            Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
+            nextFireTime = Time.time + fireRate;
+        }
+    }
+}
+    </script>
+    <script type="text/x-code" data-lang="csharp" data-file="Bullet.cs">
+using UnityEngine;
+
+public class Bullet : MonoBehaviour
+{
+    [SerializeField] private float speed = 14f;
+    [SerializeField] private float lifeTime = 2f;
+    [SerializeField] private int damage = 1;
+
+    void Start()
+    {
+        Destroy(gameObject, lifeTime);   // 2 秒後自動消失，避免越積越多
+    }
+
+    void Update()
+    {
+        transform.Translate(Vector2.right * speed * Time.deltaTime);
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.TryGetComponent(out EnemyHealth enemy))
+        {
+            enemy.TakeDamage(damage);
+            Destroy(gameObject);
+        }
+    }
+}
+    </script>
+    <script type="text/x-code" data-lang="csharp" data-file="EnemyHealth.cs">
+using UnityEngine;
+
+public class EnemyHealth : MonoBehaviour
+{
+    [SerializeField] private int maxHp = 3;
+    private int hp;
+
+    void Awake()
+    {
+        hp = maxHp;
+    }
+
+    public void TakeDamage(int amount)
+    {
+        hp -= amount;
+        if (hp <= 0)
+        {
+            Destroy(gameObject);
+        }
+    }
+}
+    </script>
+    <div class="prose">
+      <p>子彈 Prefab 要有：SpriteRenderer、勾了 Is Trigger 的 CircleCollider2D、Body Type 設為 <b>Kinematic</b> 的 Rigidbody2D，再掛 <code>Bullet</code>。</p>
+      <p><code>TryGetComponent(out EnemyHealth enemy)</code> 的意思是「對方身上有 EnemyHealth 的話，放進 enemy 變數並回傳 true」。比先 GetComponent 再判斷 null 更簡潔。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>生成器：定時掉金幣</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="CoinSpawner.cs">
+using UnityEngine;
+
+public class CoinSpawner : MonoBehaviour
+{
+    [SerializeField] private GameObject coinPrefab;
+    [SerializeField] private float interval = 1.5f;
+    [SerializeField] private float rangeX = 7f;
+
+    private float timer;
+
+    void Update()
+    {
+        timer += Time.deltaTime;
+        if (timer >= interval)
+        {
+            timer = 0f;
+            float x = Random.Range(-rangeX, rangeX);
+            Vector3 pos = new Vector3(x, transform.position.y, 0f);
+            Instantiate(coinPrefab, pos, Quaternion.identity);   // identity = 不旋轉
+        }
+    }
+}
+    </script>
+    <div class="prose"><p><code>Random.Range</code> 有個陷阱：<b>整數版不包含最大值</b>，<code>Random.Range(0, 3)</code> 只會得到 0、1、2；<b>小數版包含最大值</b>。拿整數版當陣列索引剛好很方便：<code>Random.Range(0, arr.Length)</code>。</p></div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>生成與刪除</h2>
+      <ul>
+        <li><b>拖到欄位的是場景裡的物件，不是 Prefab</b>：那個物件一被刪除，就會出現 <code>MissingReferenceException</code>。欄位要從 <b>Project 視窗</b>拖 Prefab 進去。</li>
+        <li><b><code>Destroy(this)</code> 和 <code>Destroy(gameObject)</code> 搞混</b>：<code>this</code> 只刪掉這個腳本元件，物件還在。</li>
+        <li><b>生成的物件從不清理</b>：子彈飛出畫面後還在跑，數量一多就變卡。記得設壽命或飛出範圍就刪。</li>
+        <li><b>Random 名稱衝突</b>：同時寫了 <code>using System;</code> 時，<code>Random</code> 會出現 <code>CS0104</code> 模糊參考，改寫成 <code>UnityEngine.Random.Range(...)</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>往面向的方向射擊</h2>
+      <div class="prose"><p>目前子彈永遠往右飛。改成：角色面向左邊時（<code>SpriteRenderer.flipX</code> 為 true）子彈往左飛。提示：<code>Instantiate</code> 會回傳生成的 GameObject，可以拿它的 Bullet 元件設定方向。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="Bullet.cs（新增）">
+private Vector2 direction = Vector2.right;
+
+public void SetDirection(Vector2 dir)
+{
+    direction = dir;
+}
+
+void Update()
+{
+    transform.Translate(direction * speed * Time.deltaTime);
+}
+        </script>
+        <script type="text/x-code" data-lang="csharp" data-file="Shooter.cs（修改發射）">
+[SerializeField] private SpriteRenderer playerSprite;
+
+// 在發射的地方
+GameObject b = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
+Vector2 dir = playerSprite.flipX ? Vector2.left : Vector2.right;
+b.GetComponent<Bullet>().SetDirection(dir);
+        </script>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>量產關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "`Destroy(gameObject, 2f)` 的意思是？", "o": ["立刻刪除，2 秒後重生", "2 秒後刪除這個物件", "刪除 2 個物件", "讓物件縮小到 2 倍"], "a": 1, "e": "第二個參數是延遲秒數。"},
+  {"q": "`Random.Range(0, 3)` 可能得到哪些值？", "o": ["0、1、2、3", "1、2、3", "0、1、2", "0.0 到 3.0 之間的小數"], "a": 2, "e": "整數版不包含最大值。"},
+  {"q": "`Instantiate(prefab, pos, Quaternion.identity)` 的第三個參數代表？", "o": ["不旋轉", "放大一倍", "隨機方向", "跟著父物件"], "a": 0, "e": "Quaternion.identity 是「沒有任何旋轉」。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.08 ======================= -->
+<article class="chapter" id="ch8" data-lv="08" data-short="遊戲流程與 UI" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.08 · 遊戲流程與 UI</div>
+    <h1>分數、Game Over 和換關</h1>
+    <p class="lede">有了會動的角色和會被撿的金幣，還需要一個「裁判」記分、判定輸贏、切換場景。這個角色通常叫 GameManager。</p>
+  </header>
+
+  <section>
+    <h2>GameManager：全場只有一個的裁判</h2>
+    <div class="prose"><p>下面的寫法叫做 <b>Singleton（單例）</b>：用一個 <code>static</code> 屬性存著自己，其他腳本寫 <code>GameManager.Instance.AddScore(1)</code> 就能呼叫，不用拖欄位。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="GameManager.cs">
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using TMPro;
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance { get; private set; }
+
+    [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private GameObject gameOverPanel;
+
+    private int score;
+    private bool isGameOver;
+
+    void Awake()
+    {
+        // 場景裡如果多放了一個，刪掉多的
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
+
+    void Start()
+    {
+        gameOverPanel.SetActive(false);
+        UpdateScoreText();
+    }
+
+    public void AddScore(int amount)
+    {
+        if (isGameOver) return;
+        score += amount;
+        UpdateScoreText();
+    }
+
+    public void GameOver()
+    {
+        if (isGameOver) return;
+        isGameOver = true;
+        gameOverPanel.SetActive(true);
+        Time.timeScale = 0f;   // 暫停整個遊戲
+    }
+
+    public void Restart()
+    {
+        Time.timeScale = 1f;   // 一定要改回來
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    private void UpdateScoreText()
+    {
+        scoreText.text = $"Score: {score}";
+    }
+}
+    </script>
+    <script type="text/x-code" data-lang="csharp" data-file="Coin.cs">
+using UnityEngine;
+
+public class Coin : MonoBehaviour
+{
+    [SerializeField] private int value = 1;
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            GameManager.Instance.AddScore(value);
+            Destroy(gameObject);
+        }
+    }
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>做出 UI</h2>
+    <ol class="steps-list">
+      <li><div>Hierarchy 右鍵 → <span class="path">UI → Text - TextMeshPro</span>。第一次會跳出視窗，按 <b>Import TMP Essentials</b>。Unity 會自動建立 Canvas 和 EventSystem。</div></li>
+      <li><div>選 Canvas，把 Canvas Scaler 的 UI Scale Mode 改成 <b>Scale With Screen Size</b>，Reference Resolution 設 1920 × 1080，UI 才不會在不同螢幕上大小不一。</div></li>
+      <li><div>在 Canvas 下建立 <span class="path">UI → Panel</span> 當作 Game Over 畫面，裡面放一段文字和一個 <span class="path">UI → Button - TextMeshPro</span>。</div></li>
+      <li><div>建立空物件 <code>GameManager</code>，掛上腳本，把分數文字和 Panel 拖進欄位。</div></li>
+      <li><div>選按鈕，在 <b>On Click ()</b> 按 +，把 GameManager 物件拖進去，選 <span class="path">GameManager → Restart</span>。</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>切換場景</h2>
+    <div class="prose">
+      <p>場景要先加入清單才能載入：<span class="path">File → Build Profiles</span>，在 Scene List 加入你的場景（舊版叫 Build Settings）。每個場景會有一個編號 <code>buildIndex</code>。</p>
+    </div>
+    <script type="text/x-code" data-lang="csharp" data-file="切換場景">
+using UnityEngine.SceneManagement;
+
+SceneManager.LoadScene("Level2");                                        // 用名稱
+SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);   // 下一個編號
+    </script>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>UI 和流程</h2>
+      <ul>
+        <li><b>中文變成方塊 □</b>：TextMeshPro 預設字型只有英文字。要放中文，先把中文字型檔（例如 Noto Sans TC 的 .otf）放進專案，右鍵 → <span class="path">Create → TextMeshPro → Font Asset</span>，Atlas Population Mode 設 <b>Dynamic</b>，再把文字的 Font Asset 換成它。範例程式先用英文 <code>Score:</code> 就是為了避開這個問題。</li>
+        <li><b>重新開始後畫面還是不動</b>：<code>Time.timeScale</code> 不會隨場景重載而重置，載入前要改回 1。</li>
+        <li><b>載入場景失敗</b>：場景沒加進 Build Profiles 的 Scene List，或名稱拼錯。</li>
+        <li><b><code>GameManager.Instance</code> 是 null</b>：場景裡根本沒放 GameManager 物件。</li>
+        <li><b>欄位型別用錯</b>：TextMeshPro 的文字要宣告成 <code>TMP_Text</code>，宣告成舊的 <code>Text</code> 會拖不進去。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>60 秒限時</h2>
+      <div class="prose"><p>在 GameManager 加一個倒數計時器：從 60 秒開始倒數，顯示在另一個 TMP 文字上（顯示整數秒），歸零時呼叫 <code>GameOver()</code>。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="GameManager.cs（新增）">
+[SerializeField] private TMP_Text timerText;
+[SerializeField] private float timeLimit = 60f;
+private float timeLeft;
+
+// 在 Start() 裡加上
+timeLeft = timeLimit;
+
+void Update()
+{
+    if (isGameOver) return;
+
+    timeLeft -= Time.deltaTime;
+    if (timeLeft <= 0f)
+    {
+        timeLeft = 0f;
+        GameOver();
+    }
+    timerText.text = $"Time: {Mathf.CeilToInt(timeLeft)}";
+}
+        </script>
+        <p class="explain"><code>Mathf.CeilToInt</code> 無條件進位，所以 59.2 秒會顯示 60，到真正歸零才顯示 0。</p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>流程關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "讓整個遊戲暫停，最簡單的做法是？", "o": ["刪掉玩家", "`Time.timeScale = 0f`", "`Application.Quit()`", "把 Update 改名"], "a": 1, "e": "timeScale 為 0 時，deltaTime 和物理都會停下來。"},
+  {"q": "重新載入目前場景的寫法是？", "o": ["`SceneManager.Reload()`", "`Application.LoadLevel()`", "`SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex)`", "`Scene.Restart()`"], "a": 2, "e": "取得目前場景的編號，再載入一次。"},
+  {"q": "TextMeshPro 的中文顯示成方塊，原因是？", "o": ["預設字型資產不包含中文字", "Unity 不支援中文", "字體大小太小", "Canvas 沒有設定"], "a": 0, "e": "要自己建立包含中文的 Font Asset。"},
+  {"q": "`GameManager.Instance` 這種寫法叫做？", "o": ["Prefab", "Coroutine", "Singleton（單例）", "Interface"], "a": 2, "e": "確保全場只有一個，並且可以從任何地方取得。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.09 ======================= -->
+<article class="chapter" id="ch9" data-lv="09" data-short="進階技巧" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.09 · 進階技巧</div>
+    <h1>協程、事件、ScriptableObject，再加動畫和音效</h1>
+    <p class="lede">這幾個工具能讓程式更整齊：等待一段時間、讓腳本彼此不用綁死、把數值設定獨立出來。最後補上讓遊戲有生命感的動畫和音效。</p>
+  </header>
+
+  <section>
+    <h2>協程 Coroutine：會等待的方法</h2>
+    <div class="prose"><p>你在 Python 用過 <code>yield</code> 的話，協程就是同一個概念：方法執行到 <code>yield</code> 會先暫停，下次再從那裡繼續。Unity 會幫你在適當的時間喚醒它。</p></div>
+    <div class="compare">
+      <script type="text/x-code" data-lang="python" data-file="Python generator">
+def countdown():
+    for i in range(3, 0, -1):
+        yield i
+      </script>
+      <script type="text/x-code" data-lang="csharp" data-file="C# 協程">
+IEnumerator Countdown()
+{
+    for (int i = 3; i > 0; i--)
+    {
+        Debug.Log(i);
+        yield return new WaitForSeconds(1f);
+    }
+    Debug.Log("開始！");
+}
+      </script>
+    </div>
+    <script type="text/x-code" data-lang="csharp" data-file="DamageFlash.cs">
+using System.Collections;
+using UnityEngine;
+
+public class DamageFlash : MonoBehaviour
+{
+    [SerializeField] private float flashTime = 0.1f;
+    private SpriteRenderer sr;
+
+    void Awake()
+    {
+        sr = GetComponent<SpriteRenderer>();
+    }
+
+    public void Flash()
+    {
+        StartCoroutine(FlashRoutine());
+    }
+
+    private IEnumerator FlashRoutine()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            sr.color = Color.red;
+            yield return new WaitForSeconds(flashTime);
+            sr.color = Color.white;
+            yield return new WaitForSeconds(flashTime);
+        }
+    }
+}
+    </script>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>寫法</th><th>等待多久</th></tr></thead>
+        <tbody>
+          <tr><td><code>yield return null;</code></td><td>等到下一幀</td></tr>
+          <tr><td><code>yield return new WaitForSeconds(1f);</code></td><td>遊戲時間 1 秒，暫停時也會停</td></tr>
+          <tr><td><code>yield return new WaitForSecondsRealtime(1f);</code></td><td>真實時間 1 秒，暫停選單的動畫用這個</td></tr>
+          <tr><td><code>yield return new WaitForFixedUpdate();</code></td><td>等到下一次物理更新</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>事件：讓腳本不用互相認識</h2>
+    <div class="prose"><p>玩家受傷時，血條 UI、音效、畫面震動都要反應。與其讓 <code>PlayerHealth</code> 一個一個去呼叫它們，不如發出一個事件，想知道的人自己來訂閱。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="PlayerHealth.cs">
+using System;
+using UnityEngine;
+
+public class PlayerHealth : MonoBehaviour
+{
+    public event Action<int> OnHealthChanged;   // 會帶一個 int（剩餘血量）
+    public event Action OnDied;
+
+    [SerializeField] private int maxHp = 3;
+    private int hp;
+
+    void Awake()
+    {
+        hp = maxHp;
+    }
+
+    public void TakeDamage(int amount)
+    {
+        hp = Mathf.Max(hp - amount, 0);
+        OnHealthChanged?.Invoke(hp);   // ?. ：有人訂閱才呼叫
+        if (hp == 0)
+        {
+            OnDied?.Invoke();
+        }
+    }
+}
+    </script>
+    <script type="text/x-code" data-lang="csharp" data-file="HealthUI.cs">
+using UnityEngine;
+using TMPro;
+
+public class HealthUI : MonoBehaviour
+{
+    [SerializeField] private PlayerHealth player;
+    [SerializeField] private TMP_Text hpText;
+
+    void OnEnable()
+    {
+        player.OnHealthChanged += UpdateText;   // 訂閱
+    }
+
+    void OnDisable()
+    {
+        player.OnHealthChanged -= UpdateText;   // 取消訂閱
+    }
+
+    private void UpdateText(int hp)
+    {
+        hpText.text = $"HP: {hp}";
+    }
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>ScriptableObject：把數值做成資料檔</h2>
+    <div class="prose"><p>史萊姆、蝙蝠、骷髏用同一支敵人腳本，只是數值不同。把數值放在 ScriptableObject 裡，就能在 Project 視窗建立好幾份設定檔，讓企劃直接調數值，不用碰程式。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="EnemyData.cs">
+using UnityEngine;
+
+[CreateAssetMenu(fileName = "EnemyData", menuName = "Game/Enemy Data")]
+public class EnemyData : ScriptableObject
+{
+    public string displayName = "Slime";
+    public int maxHp = 3;
+    public float moveSpeed = 2f;
+    public Sprite sprite;
+}
+    </script>
+    <div class="prose"><p>存檔後在 Project 右鍵 → <span class="path">Create → Game → Enemy Data</span> 就能建立資料檔。敵人腳本裡宣告 <code>[SerializeField] private EnemyData data;</code>，再用 <code>data.maxHp</code> 讀取。</p></div>
+  </section>
+
+  <section>
+    <h2>動畫和音效入門</h2>
+    <div class="prose">
+      <p><b>Animator</b>：把一組 Sprite 圖片拖進 Scene，Unity 會自動建立動畫片段（Animation Clip）和 Animator Controller。在 Animator 視窗加上參數（例如 float <code>Speed</code>、bool <code>IsGrounded</code>），用箭頭連接狀態並設定切換條件，再由程式更新參數：</p>
+    </div>
+    <script type="text/x-code" data-lang="csharp" data-file="更新動畫參數">
+[SerializeField] private Animator animator;
+
+// 在 Update() 裡
+animator.SetFloat("Speed", Mathf.Abs(rb.linearVelocity.x));
+animator.SetBool("IsGrounded", IsGrounded());
+
+// 受傷時（Trigger 參數用一次就會自動重置）
+animator.SetTrigger("Hurt");
+    </script>
+    <div class="prose">
+      <p>像素風遊戲的動畫切換通常要即時：在轉換箭頭上取消 <b>Has Exit Time</b>，Transition Duration 設 0。</p>
+      <p><b>音效</b>：物件加上 <code>AudioSource</code> 元件，短音效用 <code>PlayOneShot</code>，可以重疊播放：</p>
+    </div>
+    <script type="text/x-code" data-lang="csharp" data-file="播放音效">
+[SerializeField] private AudioSource sfxSource;
+[SerializeField] private AudioClip jumpClip;
+
+// 跳躍時
+sfxSource.PlayOneShot(jumpClip);
+    </script>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>進階工具的坑</h2>
+      <ul>
+        <li><b>直接呼叫 <code>FlashRoutine()</code></b>：什麼事都不會發生，協程一定要用 <code>StartCoroutine(...)</code> 啟動。</li>
+        <li><b>物件被停用，協程也停了</b>：<code>SetActive(false)</code> 或物件被刪除時，它身上的協程會全部中止。</li>
+        <li><b>訂閱了事件卻沒取消</b>：物件被刪除後，事件仍會呼叫它，出現 <code>MissingReferenceException</code>。<code>+=</code> 和 <code>-=</code> 要成對出現。</li>
+        <li><b>Animator 參數名稱拼錯</b>：不會出現紅字，只有黃色警告 <code>Parameter 'speed' does not exist</code>，動畫就是不切換。</li>
+        <li><b>在 Play 模式中修改 ScriptableObject</b>：和一般物件不同，<b>修改會被保存下來</b>。執行中不要用程式改它的數值，要改就先複製到自己的欄位。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>受傷後無敵 1.5 秒</h2>
+      <div class="prose"><p>修改 <code>PlayerHealth</code>：受傷後 1.5 秒內再被打不扣血。提示：用一個 <code>bool isInvincible</code>，在協程裡設成 true，等待後設回 false。</p></div>
+      <details class="answer">
+        <summary>看參考答案</summary>
+        <script type="text/x-code" data-lang="csharp" data-file="PlayerHealth.cs（修改）">
+using System;
+using System.Collections;
+using UnityEngine;
+
+public class PlayerHealth : MonoBehaviour
+{
+    public event Action<int> OnHealthChanged;
+    public event Action OnDied;
+
+    [SerializeField] private int maxHp = 3;
+    [SerializeField] private float invincibleTime = 1.5f;
+
+    private int hp;
+    private bool isInvincible;
+
+    void Awake()
+    {
+        hp = maxHp;
+    }
+
+    public void TakeDamage(int amount)
+    {
+        if (isInvincible || hp == 0) return;
+
+        hp = Mathf.Max(hp - amount, 0);
+        OnHealthChanged?.Invoke(hp);
+
+        if (hp == 0)
+        {
+            OnDied?.Invoke();
+        }
+        else
+        {
+            StartCoroutine(InvincibleRoutine());
+        }
+    }
+
+    private IEnumerator InvincibleRoutine()
+    {
+        isInvincible = true;
+        yield return new WaitForSeconds(invincibleTime);
+        isInvincible = false;
+    }
+}
+        </script>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>進階關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "啟動協程的正確寫法是？", "o": ["`MyRoutine();`", "`StartCoroutine(MyRoutine());`", "`yield MyRoutine();`", "`new Coroutine(MyRoutine);`"], "a": 1, "e": "協程一定要交給 StartCoroutine 執行。"},
+  {"q": "`yield return null;` 代表什麼？", "o": ["結束協程", "等待 1 秒", "等待下一幀", "暫停整個遊戲"], "a": 2, "e": "回傳 null 的意思是「下一幀再繼續」。"},
+  {"q": "在 `OnEnable` 用 `+=` 訂閱事件，應該在哪裡取消？", "o": ["`OnDisable` 用 `-=`", "`Start` 用 `-=`", "不需要取消", "`Update` 每幀取消一次"], "a": 0, "e": "成對寫在 OnEnable 和 OnDisable，物件停用或刪除時就會自動取消。"},
+  {"q": "ScriptableObject 最適合用來做什麼？", "o": ["偵測碰撞", "取代 Update", "播放音效", "存放可共用的資料設定，例如敵人數值"], "a": 3, "e": "它是資料檔，可以讓很多物件共用同一份設定。"}
+]
+      </script>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.10 ======================= -->
+<article class="chapter" id="ch10" data-lv="10" data-short="總專案：平台跳躍" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.10 · 魔王關</div>
+    <h1>總專案：做出一關完整的 2D 平台遊戲</h1>
+    <p class="lede">把前面學到的組起來：玩家能跑能跳、撿金幣加分、踩扁巡邏的敵人、碰到敵人或掉下去就輸、摸到旗子就過關。每完成一步就打勾。</p>
+  </header>
+
+  <section>
+    <h2>進度清單</h2>
+    <div class="box">
+      <ul class="checklist" data-key="final">
+        <li data-id="1">搭好場景：Tilemap 地板、Ground 圖層、玩家物件</li>
+        <li data-id="2">玩家可以左右移動、跳躍，掉出地圖會 Game Over</li>
+        <li data-id="3">GameManager 和分數 UI 運作正常</li>
+        <li data-id="4">金幣可以撿，分數會增加</li>
+        <li data-id="5">敵人會來回巡邏，可以被踩扁，正面碰到會輸</li>
+        <li data-id="6">終點旗子觸發過關畫面</li>
+        <li data-id="7">攝影機平滑跟隨玩家</li>
+        <li data-id="8">從頭玩一次：輸了能重來，贏了能進下一關</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>步驟 1：搭場景</h2>
+    <ol class="steps-list">
+      <li><div>Hierarchy 右鍵 → <span class="path">2D Object → Tilemap → Rectangular</span>。開啟 <span class="path">Window → 2D → Tile Palette</span>，建立調色盤，把地形圖片拖進去，就能像畫圖一樣刷地板。</div></li>
+      <li><div>選 Tilemap 物件，加上 <b>Tilemap Collider 2D</b> 和 <b>Composite Collider 2D</b>（會自動加 Rigidbody2D，把它改成 <b>Static</b>）。在 Tilemap Collider 2D 把 <b>Composite Operation</b> 設為 Merge（舊版是勾 Used By Composite），碰撞邊界會合併成一整塊，角色不會卡在磚塊接縫。</div></li>
+      <li><div>Tilemap 的 Layer 設為 <code>Ground</code>。</div></li>
+      <li><div>玩家物件：SpriteRenderer、CapsuleCollider2D、Rigidbody2D（Gravity Scale 3、Freeze Rotation Z、Collision Detection 設 Continuous、Interpolate 設 Interpolate）。Tag 設為 <code>Player</code>，底下建立 <code>GroundCheck</code> 子物件。</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>步驟 2：玩家</h2>
+    <div class="prose"><p>這是 LV.06 腳本的完整版：加上角色轉向、彈跳方法（踩敵人時用），以及掉出地圖的判定。<code>[Header]</code> 會在 Inspector 分組顯示欄位。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="PlayerController.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+[RequireComponent(typeof(Rigidbody2D))]
+public class PlayerController : MonoBehaviour
+{
+    [Header("移動")]
+    [SerializeField] private float moveSpeed = 7f;
+    [SerializeField] private float jumpForce = 13f;
+
+    [Header("地面檢測")]
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundRadius = 0.15f;
+    [SerializeField] private LayerMask groundLayer;
+
+    [Header("其他")]
+    [SerializeField] private float fallLimitY = -10f;
+
+    private Rigidbody2D rb;
+    private SpriteRenderer sr;
+    private float inputX;
+    private bool jumpQueued;
+    private bool isGrounded;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        sr = GetComponent<SpriteRenderer>();
+    }
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb == null) return;
+
+        inputX = 0f;
+        if (kb.aKey.isPressed || kb.leftArrowKey.isPressed)  inputX -= 1f;
+        if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) inputX += 1f;
+
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundRadius, groundLayer) != null;
+
+        if (kb.spaceKey.wasPressedThisFrame && isGrounded)
+        {
+            jumpQueued = true;
+        }
+
+        if (inputX != 0f)
+        {
+            sr.flipX = inputX < 0f;
+        }
+
+        if (transform.position.y < fallLimitY)
+        {
+            GameManager.Instance.GameOver();
+        }
+    }
+
+    void FixedUpdate()
+    {
+        float vy = rb.linearVelocity.y;
+        if (jumpQueued)
+        {
+            vy = jumpForce;
+            jumpQueued = false;
+        }
+        rb.linearVelocity = new Vector2(inputX * moveSpeed, vy);
+    }
+
+    // 踩到敵人時由敵人呼叫，讓玩家往上彈
+    public void Bounce(float force)
+    {
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, force);
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (groundCheck == null) return;
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(groundCheck.position, groundRadius);
+    }
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>步驟 3：GameManager 和 UI</h2>
+    <div class="prose"><p>LV.08 的版本再加上「過關」和「下一關」。UI 需要分數文字、Game Over 面板（含 Restart 按鈕）和過關面板（含 Next 按鈕）。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="GameManager.cs">
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using TMPro;
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance { get; private set; }
+
+    [SerializeField] private TMP_Text scoreText;
+    [SerializeField] private GameObject gameOverPanel;
+    [SerializeField] private GameObject levelCompletePanel;
+
+    private int score;
+    private bool isFinished;
+
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+        Time.timeScale = 1f;
+    }
+
+    void Start()
+    {
+        gameOverPanel.SetActive(false);
+        levelCompletePanel.SetActive(false);
+        UpdateScoreText();
+    }
+
+    public void AddScore(int amount)
+    {
+        if (isFinished) return;
+        score += amount;
+        UpdateScoreText();
+    }
+
+    public void GameOver()
+    {
+        if (isFinished) return;
+        isFinished = true;
+        gameOverPanel.SetActive(true);
+        Time.timeScale = 0f;
+    }
+
+    public void LevelComplete()
+    {
+        if (isFinished) return;
+        isFinished = true;
+        levelCompletePanel.SetActive(true);
+        Time.timeScale = 0f;
+    }
+
+    public void Restart()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void NextLevel()
+    {
+        Time.timeScale = 1f;
+        int next = SceneManager.GetActiveScene().buildIndex + 1;
+        if (next < SceneManager.sceneCountInBuildSettings)
+        {
+            SceneManager.LoadScene(next);
+        }
+        else
+        {
+            SceneManager.LoadScene(0);   // 最後一關之後回到第一關
+        }
+    }
+
+    private void UpdateScoreText()
+    {
+        scoreText.text = $"Score: {score}";
+    }
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>步驟 4：金幣</h2>
+    <div class="prose"><p>直接沿用 LV.08 的 <code>Coin.cs</code>。金幣物件：SpriteRenderer、CircleCollider2D（勾 Is Trigger）。做成 Prefab 後在地圖上多擺幾個。</p></div>
+  </section>
+
+  <section>
+    <h2>步驟 5：巡邏敵人</h2>
+    <div class="prose"><p>敵人用 <b>Kinematic</b> 的 Rigidbody2D，在 FixedUpdate 用 <code>MovePosition</code> 移動，才會正確和玩家發生碰撞。判斷「被踩」的方法是看碰撞點的<b>法線方向</b>：玩家從上面壓下來時，法線朝下。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="EnemyPatrol.cs">
+using UnityEngine;
+
+[RequireComponent(typeof(Rigidbody2D))]
+public class EnemyPatrol : MonoBehaviour
+{
+    [SerializeField] private Transform pointA;
+    [SerializeField] private Transform pointB;
+    [SerializeField] private float speed = 2f;
+    [SerializeField] private float stompBounce = 10f;
+
+    private Rigidbody2D rb;
+    private SpriteRenderer sr;
+    private Vector2 a;
+    private Vector2 b;
+    private Vector2 target;
+
+    void Awake()
+    {
+        rb = GetComponent<Rigidbody2D>();
+        sr = GetComponent<SpriteRenderer>();
+    }
+
+    void Start()
+    {
+        // 先把位置記下來，巡邏點就算是敵人的子物件也不會跟著跑
+        a = pointA.position;
+        b = pointB.position;
+        target = b;
+    }
+
+    void FixedUpdate()
+    {
+        Vector2 next = Vector2.MoveTowards(rb.position, target, speed * Time.fixedDeltaTime);
+        rb.MovePosition(next);
+
+        if (Vector2.Distance(next, target) < 0.05f)
+        {
+            target = (target == a) ? b : a;
+        }
+
+        sr.flipX = target.x < rb.position.x;
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (!collision.gameObject.CompareTag("Player")) return;
+
+        ContactPoint2D contact = collision.GetContact(0);
+        if (contact.normal.y < -0.5f)
+        {
+            // 玩家從上方踩下來
+            collision.gameObject.GetComponent<PlayerController>().Bounce(stompBounce);
+            Destroy(gameObject);
+        }
+        else
+        {
+            GameManager.Instance.GameOver();
+        }
+    }
+}
+    </script>
+    <div class="prose"><p>設定：敵人加 SpriteRenderer、BoxCollider2D（<b>不要</b>勾 Is Trigger）、Rigidbody2D（Kinematic）。建立兩個空物件當巡邏點 A 和 B，拖進欄位。</p></div>
+  </section>
+
+  <section>
+    <h2>步驟 6：終點旗子</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="Goal.cs">
+using UnityEngine;
+
+public class Goal : MonoBehaviour
+{
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            GameManager.Instance.LevelComplete();
+        }
+    }
+}
+    </script>
+  </section>
+
+  <section>
+    <h2>步驟 7：攝影機跟隨</h2>
+    <div class="prose"><p>掛在 Main Camera 上，Target 拖入玩家。寫在 <code>LateUpdate</code> 是為了等玩家這一幀移動完再跟上，畫面才不會抖。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="CameraFollow.cs">
+using UnityEngine;
+
+public class CameraFollow : MonoBehaviour
+{
+    [SerializeField] private Transform target;
+    [SerializeField] private float smoothTime = 0.15f;
+    [SerializeField] private Vector2 offset = new Vector2(0f, 1.5f);
+
+    private Vector3 velocity;
+
+    void LateUpdate()
+    {
+        if (target == null) return;
+
+        Vector3 goal = new Vector3(
+            target.position.x + offset.x,
+            target.position.y + offset.y,
+            transform.position.z);   // z 保持不變，不然畫面會全黑
+
+        transform.position = Vector3.SmoothDamp(transform.position, goal, ref velocity, smoothTime);
+    }
+}
+    </script>
+    <div class="prose"><p>之後想要更專業的鏡頭（邊界限制、鏡頭晃動），可以用 Package Manager 安裝 <b>Cinemachine</b>，不用寫程式就能設定。</p></div>
+  </section>
+
+  <section>
+    <h2>步驟 8：測試與輸出</h2>
+    <div class="prose">
+      <ul>
+        <li>把關卡場景加進 <span class="path">File → Build Profiles</span> 的 Scene List，複製一份場景改成第二關，測試 NextLevel。</li>
+        <li>從頭玩一次：掉下去、被敵人撞、踩敵人、撿完金幣、過關，每一種情況都試過。</li>
+        <li>在同一個 Build Profiles 視窗選平台（Windows），按 <b>Build</b>，就能得到可以給朋友玩的執行檔。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">加分挑戰</span>做完之後可以試的</h2>
+      <ul>
+        <li>加入 LV.09 的動畫：待機、跑步、跳躍三種狀態。</li>
+        <li>跳躍和撿金幣加上音效。</li>
+        <li>加入生命數：被撞到先扣命並閃爍無敵，命用完才 Game Over。</li>
+        <li><b>土狼時間（Coyote Time）</b>：剛走出平台邊緣的 0.1 秒內還能起跳，手感會好很多。</li>
+        <li>用 ScriptableObject 做出三種不同速度的敵人。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>魔王題</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "EnemyPatrol 用什麼判斷玩家是「踩下來」還是「撞過來」？", "o": ["玩家的移動速度", "碰撞點的法線方向", "兩者的 Tag", "碰撞發生的時間"], "a": 1, "e": "法線 y 小於 -0.5，代表接觸面朝下，玩家在上方。"},
+  {"q": "攝影機跟隨為什麼寫在 `LateUpdate`？", "o": ["LateUpdate 比較省效能", "Update 不能改 transform", "等角色這一幀移動完再跟上，避免畫面抖動", "因為攝影機沒有 Rigidbody2D"], "a": 2, "e": "LateUpdate 會在所有 Update 之後執行。"},
+  {"q": "按下 Restart 後場景載入了，但角色完全不動，最可能的原因是？", "o": ["`Time.timeScale` 沒有改回 1", "Prefab 壞掉了", "Tag 設錯", "場景沒有存檔"], "a": 0, "e": "timeScale 是全域設定，載入新場景也不會自動重置。"}
+]
+      </script>
+    </div>
+  </section>
+
+  <section>
+    <h2>接下來去哪裡學</h2>
+    <div class="prose">
+      <ul>
+        <li><a href="https://learn.unity.com/" target="_blank" rel="noopener">Unity Learn</a>：官方免費課程，推薦「Junior Programmer」路線。</li>
+        <li><a href="https://docs.unity3d.com/Manual/index.html" target="_blank" rel="noopener">Unity Manual</a> 和 <a href="https://docs.unity3d.com/ScriptReference/index.html" target="_blank" rel="noopener">Scripting API</a>：查元件和方法的用法。在 VS 裡對著 Unity 的類別按 F12 也能看到說明。</li>
+        <li><a href="https://learn.microsoft.com/zh-tw/dotnet/csharp/" target="_blank" rel="noopener">Microsoft C# 文件（繁體中文）</a>：想更深入學 C# 語法時看。</li>
+        <li>參加一次 Game Jam（例如 itch.io 上的 jam），在 48 小時內做出一個小遊戲，是進步最快的方法。</li>
+      </ul>
+    </div>
+  </section>
+</article>
+
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  var KEY = "unity-cs-handbook-v1";
+  var state = { done: {}, quiz: {}, check: {}, last: null };
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        state.done = parsed.done || {};
+        state.quiz = parsed.quiz || {};
+        state.check = parsed.check || {};
+        state.last = parsed.last || null;
+      }
+    }
+  } catch (e) {}
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function md(s) {
+    return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+  }
+  function dedent(text) {
+    var lines = text.replace(/\r/g, "").split("\n");
+    while (lines.length && !lines[0].trim()) lines.shift();
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    var min = Infinity;
+    lines.forEach(function (l) {
+      if (!l.trim()) return;
+      var m = l.match(/^ */)[0].length;
+      if (m < min) min = m;
+    });
+    if (!isFinite(min)) min = 0;
+    return lines.map(function (l) { return l.slice(min); }).join("\n");
+  }
+
+  /* ---------- 程式碼區塊 ---------- */
+  document.querySelectorAll('script[type="text/x-code"]').forEach(function (sc) {
+    var lang = sc.dataset.lang || "csharp";
+    var code = dedent(sc.textContent);
+    var fig = document.createElement("figure");
+    fig.className = "code";
+    var head = document.createElement("div");
+    head.className = "code-head";
+    var label = document.createElement("span");
+    label.textContent = sc.dataset.file || (lang === "python" ? "Python" : "C#");
+    if (sc.closest(".compare")) label.className = lang === "python" ? "lang-py" : "lang-cs";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy";
+    btn.textContent = "複製";
+    head.appendChild(label);
+    head.appendChild(btn);
+    var pre = document.createElement("pre");
+    var el = document.createElement("code");
+    el.className = "language-" + lang;
+    el.textContent = code;
+    pre.appendChild(el);
+    fig.appendChild(head);
+    fig.appendChild(pre);
+    if (window.hljs) {
+      try { window.hljs.highlightElement(el); } catch (e) {}
+    }
+    btn.addEventListener("click", function () {
+      function selectIt() {
+        var r = document.createRange();
+        r.selectNodeContents(el);
+        var s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+        btn.textContent = "已選取，按 Ctrl+C";
+      }
+      try {
+        navigator.clipboard.writeText(code).then(function () {
+          btn.textContent = "已複製";
+          setTimeout(function () { btn.textContent = "複製"; }, 1600);
+        }, selectIt);
+      } catch (e) { selectIt(); }
+    });
+    sc.replaceWith(fig);
+  });
+
+  /* ---------- Console 區塊 ---------- */
+  document.querySelectorAll('script[type="text/x-console"]').forEach(function (sc) {
+    var box = document.createElement("div");
+    box.className = "console";
+    box.innerHTML = '<div class="console-head">Console</div>';
+    var body = document.createElement("div");
+    body.className = "console-body";
+    dedent(sc.textContent).split("\n").forEach(function (line) {
+      var d = document.createElement("div");
+      d.className = "console-line";
+      if (line.indexOf("! ") === 0) { d.classList.add("err"); line = line.slice(2); }
+      else if (line.indexOf("~ ") === 0) { d.classList.add("warn"); line = line.slice(2); }
+      var t = document.createElement("span");
+      t.textContent = line;
+      d.appendChild(t);
+      body.appendChild(d);
+    });
+    box.appendChild(body);
+    sc.replaceWith(box);
+  });
+
+  /* ---------- 章節與目錄 ---------- */
+  var chapters = Array.prototype.slice.call(document.querySelectorAll(".chapter"));
+  var list = document.getElementById("levelList");
+  var links = {};
+  chapters.forEach(function (ch) {
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#" + ch.id;
+    a.className = "lv-link";
+    a.innerHTML =
+      '<span class="lv-num">LV.' + ch.dataset.lv + "</span>" +
+      '<span class="lv-name">' + esc(ch.dataset.short) + '<span class="lv-score"></span></span>' +
+      '<span class="coin" aria-hidden="true"></span>';
+    li.appendChild(a);
+    list.appendChild(li);
+    links[ch.id] = a;
+  });
+
+  var xpBar = document.getElementById("xpBar");
+  chapters.forEach(function () { xpBar.appendChild(document.createElement("i")); });
+
+  function quizCorrect(id) {
+    var q = state.quiz[id] || {};
+    var data = quizData[id] || [];
+    var c = 0;
+    Object.keys(q).forEach(function (k) {
+      if (data[k] && data[k].a === q[k]) c++;
+    });
+    return { correct: c, answered: Object.keys(q).length, total: data.length };
+  }
+
+  function refreshProgress() {
+    var count = 0;
+    chapters.forEach(function (ch) {
+      var done = !!state.done[ch.id];
+      if (done) count++;
+      var a = links[ch.id];
+      a.querySelector(".coin").classList.toggle("on", done);
+      var s = quizCorrect(ch.id);
+      a.querySelector(".lv-score").textContent =
+        s.total && s.answered === s.total ? "測驗 " + s.correct + " / " + s.total : "";
+      a.setAttribute("aria-label", "LV." + ch.dataset.lv + " " + ch.dataset.short + (done ? "（已完成）" : ""));
+    });
+    document.getElementById("xpCount").textContent = count;
+    xpBar.querySelectorAll("i").forEach(function (seg, i) { seg.classList.toggle("on", i < count); });
+  }
+
+  /* ---------- 測驗 ---------- */
+  var quizData = {};
+  document.querySelectorAll("script.quiz-data").forEach(function (sc) {
+    var ch = sc.closest(".chapter");
+    var data;
+    try { data = JSON.parse(sc.textContent); } catch (e) { return; }
+    quizData[ch.id] = data;
+    var wrap = document.createElement("div");
+    wrap.className = "quiz";
+    var foot = document.createElement("div");
+    foot.className = "quiz-foot";
+    var score = document.createElement("div");
+    score.className = "quiz-score";
+    var reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "btn btn-ghost";
+    reset.textContent = "重新作答";
+    foot.appendChild(score);
+    foot.appendChild(reset);
+
+    var qEls = data.map(function (item, qi) {
+      var q = document.createElement("div");
+      q.className = "q";
+      var t = document.createElement("div");
+      t.className = "q-text";
+      t.innerHTML = '<span class="q-no">Q' + (qi + 1) + "</span>" + md(item.q);
+      var opts = document.createElement("div");
+      opts.className = "opts";
+      opts.setAttribute("role", "group");
+      var exp = document.createElement("div");
+      exp.className = "explain";
+      exp.hidden = true;
+      var btns = item.o.map(function (text, oi) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "opt";
+        b.innerHTML = '<span class="mark"></span>' + md(text);
+        b.addEventListener("click", function () {
+          if (!state.quiz[ch.id]) state.quiz[ch.id] = {};
+          state.quiz[ch.id][qi] = oi;
+          save();
+          paint();
+          refreshProgress();
+        });
+        opts.appendChild(b);
+        return b;
+      });
+      q.appendChild(t);
+      q.appendChild(opts);
+      q.appendChild(exp);
+      wrap.appendChild(q);
+      function paint() {
+        var picked = (state.quiz[ch.id] || {})[qi];
+        var answered = picked !== undefined;
+        btns.forEach(function (b, oi) {
+          b.disabled = answered;
+          b.classList.remove("right", "wrong");
+          var mark = b.querySelector(".mark");
+          mark.textContent = "";
+          if (!answered) return;
+          if (oi === item.a) { b.classList.add("right"); mark.textContent = "✓"; }
+          else if (oi === picked) { b.classList.add("wrong"); mark.textContent = "✗"; }
+        });
+        if (answered) {
+          exp.hidden = false;
+          exp.innerHTML = (picked === item.a ? "答對了。" : "答錯了。") + md(item.e);
+        } else {
+          exp.hidden = true;
+        }
+        updateScore();
+      }
+      return { paint: paint };
+    });
+
+    function updateScore() {
+      var s = quizCorrect(ch.id);
+      score.innerHTML = s.answered < s.total
+        ? "已作答 <b>" + s.answered + "</b> / " + s.total
+        : "答對 <b>" + s.correct + "</b> / " + s.total + (s.correct === s.total ? "，全對！" : "");
+    }
+    reset.addEventListener("click", function () {
+      delete state.quiz[ch.id];
+      save();
+      qEls.forEach(function (q) { q.paint(); });
+      refreshProgress();
+    });
+
+    wrap.appendChild(foot);
+    sc.replaceWith(wrap);
+    qEls.forEach(function (q) { q.paint(); });
+  });
+
+  /* ---------- 檢查清單 ---------- */
+  document.querySelectorAll(".checklist").forEach(function (ul) {
+    var key = ul.dataset.key;
+    if (!state.check[key]) state.check[key] = {};
+    ul.querySelectorAll("li").forEach(function (li) {
+      var id = li.dataset.id;
+      var text = li.innerHTML;
+      li.innerHTML = "";
+      var label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.id = "chk-" + key + "-" + id;
+      box.checked = !!state.check[key][id];
+      box.addEventListener("change", function () {
+        state.check[key][id] = box.checked;
+        save();
+      });
+      var span = document.createElement("span");
+      span.innerHTML = text;
+      label.appendChild(box);
+      label.appendChild(span);
+      li.appendChild(label);
+    });
+  });
+
+  /* ---------- 章節底部導覽 ---------- */
+  chapters.forEach(function (ch, i) {
+    var foot = document.createElement("footer");
+    foot.className = "chapter-foot";
+    var prev = document.createElement("a");
+    prev.className = "btn";
+    if (i > 0) { prev.href = "#" + chapters[i - 1].id; prev.textContent = "← LV." + chapters[i - 1].dataset.lv; }
+    else { prev.style.visibility = "hidden"; prev.textContent = "←"; }
+    var mid = document.createElement("div");
+    mid.className = "mid";
+    var done = document.createElement("button");
+    done.type = "button";
+    done.className = "btn btn-complete";
+    done.id = "done-" + ch.id;
+    var coin = document.createElement("span");
+    coin.className = "coin";
+    coin.setAttribute("aria-hidden", "true");
+    var label = document.createElement("span");
+    done.appendChild(coin);
+    done.appendChild(label);
+    mid.appendChild(done);
+    var next = document.createElement("a");
+    next.className = "btn btn-primary";
+    if (i < chapters.length - 1) { next.href = "#" + chapters[i + 1].id; next.textContent = "LV." + chapters[i + 1].dataset.lv + " →"; }
+    else { next.style.visibility = "hidden"; next.textContent = "→"; }
+    [prev, next].forEach(function (a) { a.style.textDecoration = "none"; });
+    foot.appendChild(prev);
+    foot.appendChild(mid);
+    foot.appendChild(next);
+    ch.appendChild(foot);
+
+    function paintDone() {
+      var isDone = !!state.done[ch.id];
+      label.textContent = isDone ? "已通關" : "標記完成";
+      done.classList.toggle("btn-done", isDone);
+      done.setAttribute("aria-pressed", isDone ? "true" : "false");
+      coin.classList.toggle("on", isDone);
+    }
+    done.addEventListener("click", function () {
+      state.done[ch.id] = !state.done[ch.id];
+      save();
+      paintDone();
+      refreshProgress();
+      if (state.done[ch.id]) {
+        coin.classList.remove("pop");
+        void coin.offsetWidth;
+        coin.classList.add("pop");
+      }
+    });
+    paintDone();
+  });
+
+  /* ---------- 切換章節 ---------- */
+  var nav = document.getElementById("levels");
+  var menuBtn = document.getElementById("menuBtn");
+  menuBtn.addEventListener("click", function () {
+    var open = !nav.classList.contains("open");
+    nav.classList.toggle("open", open);
+    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
+  function show(id, scroll) {
+    var target = document.getElementById(id);
+    if (!target || !target.classList.contains("chapter")) id = "ch0";
+    chapters.forEach(function (ch) { ch.hidden = ch.id !== id; });
+    Object.keys(links).forEach(function (k) {
+      if (k === id) links[k].setAttribute("aria-current", "page");
+      else links[k].removeAttribute("aria-current");
+    });
+    state.last = id;
+    save();
+    nav.classList.remove("open");
+    menuBtn.setAttribute("aria-expanded", "false");
+    if (scroll) window.scrollTo(0, 0);
+  }
+
+  window.addEventListener("hashchange", function () {
+    show(location.hash.slice(1), true);
+  });
+
+  var start = location.hash.slice(1) || state.last || "ch0";
+  show(start, false);
+  refreshProgress();
+})();
+</script>
+</body>
+</html>
