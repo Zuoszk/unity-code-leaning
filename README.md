@@ -2,7 +2,7 @@
 
 寫 C# 控制勇者的闖關小遊戲，從變數、迴圈一路學到 Unity 的 `Update`、2D 物理、Prefab 和協程。全部在瀏覽器裡執行，不用安裝 Unity。
 
-**線上遊玩：** https://zuomu0220.github.io/csharp-quest/
+**線上遊玩：** https://zuoszk.github.io/unity-code-leaning/
 
 ## 內容
 
