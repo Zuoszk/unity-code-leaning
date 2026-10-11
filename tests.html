@@ -19,6 +19,7 @@
 <script src="js/stage-grid.js"></script>
 <script src="js/stage-unity.js"></script>
 <script src="js/levels.js"></script>
+<script src="js/levels-genres.js"></script>
 <script src="js/workshop.js"></script>
 <script>
 (function () {
@@ -170,6 +171,23 @@
     return logs.join() === '1,2' || logs.join();
   });
   test('事件 += -=', () => expectLogs('public class P { public event Action<int> OnHit; public void Hit() { OnHit?.Invoke(3); } }\npublic class U { public int got; public void Sub(P p) { p.OnHit += Show; } public void Unsub(P p) { p.OnHit -= Show; } void Show(int v) { got += v; Debug.Log(v); } }\nP p = new P(); U u = new U(); u.Sub(p); p.Hit(); u.Unsub(p); p.Hit(); Debug.Log(u.got);', ['3', '3']));
+
+  /* ---------------- 新語法：enum、集合、Vector2Int ---------------- */
+  test('enum 宣告與 switch', () => expectLogs('public enum Mode { Single, Spread }\nMode m = Mode.Single; Debug.Log(m); m = Mode.Spread; switch (m) { case Mode.Single: Debug.Log("一發"); break; case Mode.Spread: Debug.Log("散射"); break; } Debug.Log((int)m); Debug.Log(m == Mode.Spread);', ['Single', '散射', '1', 'True']));
+  test('enum 預設值', () => expectLogs('public enum S { Idle, Run }\npublic class T { public S s; }\nT t = new T(); Debug.Log(t.s);', ['Idle']));
+  test('CS0117 enum 沒有這個成員', () => expectCompile('public enum S { Idle }\nS s = S.Run;', 'CS0117'));
+  test('CS0103 enum 成員沒加型別', () => expectCompile('public enum S { Idle, Run }\nS s = S.Idle; switch (s) { case Idle: break; }', 'CS0103'));
+  test('Stack', () => expectLogs('using System.Collections.Generic;\nvar s = new Stack<int>(); s.Push(1); s.Push(2); Debug.Log(s.Peek()); Debug.Log(s.Pop()); Debug.Log(s.Count);', ['2', '2', '1']));
+  test('Stack 空的時候 Pop', () => expectRuntime('var s = new Stack<int>(); s.Pop();', 'InvalidOperationException'));
+  test('Queue', () => expectLogs('var q = new Queue<string>(); q.Enqueue("a"); q.Enqueue("b"); Debug.Log(q.Dequeue()); Debug.Log(q.Count); foreach (string x in q) Debug.Log(x);', ['a', '1', 'b']));
+  test('Dictionary 讀寫與 ++', () => expectLogs('var d = new Dictionary<string, int>(); d["Stone"] = 3; d["Stone"]--; d.Add("Wood", 2); Debug.Log(d["Stone"]); Debug.Log(d.ContainsKey("Wood")); Debug.Log(d.Count);', ['2', 'True', '2']));
+  test('Dictionary TryGetValue', () => expectLogs('var d = new Dictionary<string, int>(); d["a"] = 5; if (d.TryGetValue("a", out int v)) Debug.Log(v); Debug.Log(d.TryGetValue("b", out int w)); Debug.Log(w);', ['5', 'False', '0']));
+  test('Dictionary 找不到 key', () => expectRuntime('var d = new Dictionary<string, int>(); Debug.Log(d["x"]);', 'KeyNotFoundException'));
+  test('Dictionary foreach', () => expectLogs('var d = new Dictionary<string, int>(); d["a"] = 1; d["b"] = 2; foreach (var kv in d) Debug.Log(kv.Key + "=" + kv.Value);', ['a=1', 'b=2']));
+  test('CS0019 字元和字串比較', () => expectCompile('string s = "#"; char c = s[0]; if (c == "#") { }', 'CS0019'));
+  test('Vector2Int 運算', () => expectLogs('Vector2Int p = new Vector2Int(1, 2); p += Vector2Int.right; Debug.Log(p); Debug.Log(p * 2); Debug.Log(p == new Vector2Int(2, 2)); Vector2 f = p; Debug.Log(f);', ['(2, 2)', '(4, 4)', 'True', '(2.00, 2.00)']));
+  test('CS0029 Vector2 不能直接變 Vector2Int', () => expectCompile('Vector2Int p = Vector2Int.zero; Vector2 d = Vector2.up; p += d;', 'CS0029'));
+  test('CS0411 泛型方法沒指定型別', () => expectCompile('public class D { }\nD d = JsonUtility.FromJson("{}");', 'CS0411'));
 
   /* ---------------- 關卡 ---------------- */
   if (window.CSQLevels && window.CSQLevelTest) window.CSQLevelTest(test, report);

@@ -87,8 +87,13 @@
     IndexOutOfRangeException: '陣列的索引超出範圍：第一個元素是 [0]，最後一個是 [Length - 1]',
     ArgumentOutOfRangeException: 'List 的索引超出範圍：最後一個是 [Count - 1]',
     DivideByZeroException: '整數不能除以 0',
+    KeyNotFoundException: 'Dictionary 裡沒有這個 key，先用 ContainsKey 檢查，或確認 key 的拼字和大小寫',
+    ArgumentException: '傳進去的值不合理（例如 Dictionary 重複 Add 同一個 key，或要複製的物件是 null）',
+    CS0411: '泛型方法要用 <型別> 指定型別，例如 JsonUtility.FromJson<SaveData>(json)',
+    CS1922: '這種集合不能用 { } 初始化，請先 new 出來再一個一個加',
+    CS0101: '已經有同名的型別了',
     MissingReferenceException: '這個物件已經被刪除了，卻還在使用它',
-    InvalidOperationException: 'foreach 迴圈進行中不能修改正在走訪的集合',
+    InvalidOperationException: '現在不能做這個操作：例如 foreach 進行中修改集合，或是從空的 Stack / Queue 拿東西（先檢查 Count）',
     StackOverflowException: '方法無止境地呼叫自己',
     FREEZE: '程式一直跑不完（通常是無限迴圈），Unity 編輯器卡住沒有回應'
   };
@@ -100,7 +105,7 @@
     'if', 'else', 'for', 'foreach', 'in', 'while', 'do', 'break', 'continue', 'return', 'new',
     'true', 'false', 'null', 'class', 'struct', 'public', 'private', 'protected', 'internal',
     'static', 'const', 'readonly', 'switch', 'case', 'default', 'using', 'namespace', 'this',
-    'yield', 'event', 'override', 'virtual', 'out', 'ref', 'typeof', 'base']);
+    'yield', 'event', 'override', 'virtual', 'out', 'ref', 'typeof', 'base', 'enum']);
   const TYPE_KW = new Set(['int', 'float', 'double', 'bool', 'string', 'char', 'var', 'void', 'object']);
   const MODS = new Set(['public', 'private', 'protected', 'internal', 'static', 'const', 'readonly', 'override', 'virtual']);
   const OPS = ['??=', '++', '--', '+=', '-=', '*=', '/=', '%=', '==', '!=', '<=', '>=', '&&', '||', '=>', '?.', '??',
@@ -303,8 +308,33 @@
     }
     pos(t) { return { line: t.line, col: t.col }; }
 
+    parseEnum() {
+      this.next(); // enum
+      const id = this.expectId();
+      if (this.accept(':')) this.tryType();
+      this.expect('{');
+      const members = [];
+      let v = 0;
+      while (!this.is('}')) {
+        if (this.cur.t === 'eof') this.err('CS1513', '} expected');
+        const m = this.expectId();
+        if (this.accept('=')) {
+          const neg = !!this.accept('-');
+          const n = this.next();
+          if (n.t !== 'num') this.err('CS1525', `Invalid expression term '${n.v}'`, n);
+          v = neg ? -n.v : n.v;
+        }
+        members.push({ name: m.v, value: v, line: m.line, col: m.col });
+        v++;
+        if (!this.accept(',')) break;
+      }
+      this.expect('}');
+      this.accept(';');
+      return { k: 'enum', name: id.v, members, line: id.line, col: id.col };
+    }
+
     parseProgram() {
-      const prog = { usings: [], classes: [], methods: [], stmts: [] };
+      const prog = { usings: [], classes: [], methods: [], stmts: [], enums: [] };
       while (this.cur.t !== 'eof') {
         if (this.is('using')) {
           const u = this.next();
@@ -318,11 +348,14 @@
         const attrs = this.parseAttributes();
         const mods = this.parseMods();
         if (this.is('class')) { prog.classes.push(this.parseClass(mods, attrs)); continue; }
+        if (this.is('enum')) { prog.enums.push(this.parseEnum()); continue; }
         const ty = this.tryType();
         if (ty && this.isId() && this.is('(', 1)) { prog.methods.push(this.parseMethod(mods, ty, attrs)); continue; }
         this.i = save;
         prog.stmts.push(this.parseStatement());
       }
+      // 類別裡宣告的 enum 也當成全域的（簡化）
+      for (const c of prog.classes) for (const e of c.enums || []) prog.enums.push(e);
       return prog;
     }
 
@@ -412,6 +445,7 @@
         if (this.cur.t === 'eof') this.err('CS1513', '} expected');
         const fAttrs = this.parseAttributes();
         const fMods = this.parseMods();
+        if (this.is('enum')) { (cls.enums = cls.enums || []).push(this.parseEnum()); continue; }
         if (this.is('event')) {
           this.next();
           const ty = this.tryType();
@@ -867,16 +901,24 @@
    * ========================================================= */
   function sig(r, p, min) { return { fn: true, r, p: p || [], min: min === undefined ? (p || []).length : min }; }
   const KEYS = 'abcdefghijklmnopqrstuvwxyz'.split('').map((c) => c + 'Key')
-    .concat(['spaceKey', 'enterKey', 'escapeKey', 'leftArrowKey', 'rightArrowKey', 'upArrowKey', 'downArrowKey', 'leftShiftKey', 'digit1Key', 'digit2Key']);
+    .concat(['spaceKey', 'enterKey', 'escapeKey', 'tabKey', 'leftArrowKey', 'rightArrowKey', 'upArrowKey', 'downArrowKey', 'leftShiftKey'])
+    .concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => `digit${d}Key`));
   const keyProps = {};
   KEYS.forEach((k) => { keyProps[k] = { t: 'KeyControl', ro: true }; });
 
   const TYPES = {
     string: { props: { Length: { t: 'int', ro: true } }, methods: { ToUpper: sig('string'), ToLower: sig('string'), Contains: sig('bool', ['string']), StartsWith: sig('bool', ['string']), Replace: sig('string', ['string', 'string']), ToString: sig('string') } },
     List: { props: { Count: { t: 'int', ro: true } }, methods: { Add: sig('void', ['T']), Remove: sig('bool', ['T']), Contains: sig('bool', ['T']), Clear: sig('void'), RemoveAt: sig('void', ['int']), Insert: sig('void', ['int', 'T']), IndexOf: sig('int', ['T']) } },
+    Stack: { props: { Count: { t: 'int', ro: true } }, methods: { Push: sig('void', ['T']), Pop: sig('T'), Peek: sig('T'), Clear: sig('void'), Contains: sig('bool', ['T']) } },
+    Queue: { props: { Count: { t: 'int', ro: true } }, methods: { Enqueue: sig('void', ['T']), Dequeue: sig('T'), Peek: sig('T'), Clear: sig('void'), Contains: sig('bool', ['T']) } },
+    Dictionary: {
+      props: { Count: { t: 'int', ro: true } },
+      methods: { Add: sig('void', ['K', 'V']), ContainsKey: sig('bool', ['K']), Remove: sig('bool', ['K']), Clear: sig('void'), TryGetValue: sig('bool', ['K', 'V']) }
+    },
+    KeyValuePair: { props: { Key: { t: 'K', ro: true }, Value: { t: 'V', ro: true } }, methods: {} },
     Array: { props: { Length: { t: 'int', ro: true } }, methods: {} },
     Action: { props: {}, methods: { Invoke: sig('void', ['?', '?'], 0) } },
-    Debug: { statics: {}, staticMethods: { Log: sig('void', ['?']), LogWarning: sig('void', ['?']), LogError: sig('void', ['?']) } },
+    Debug: { statics: {}, staticMethods: { Log: sig('void', ['?']), LogWarning: sig('void', ['?']), LogError: sig('void', ['?']), DrawLine: sig('void', ['Vector3', 'Vector3', 'Color', 'float'], 2) } },
     Mathf: {
       statics: { PI: { t: 'float', ro: true }, Infinity: { t: 'float', ro: true } },
       staticMethods: {
@@ -913,7 +955,33 @@
       staticMethods: {},
       ctor: { p: ['float', 'float', 'float', 'float'], min: 3 }
     },
+    Vector2Int: {
+      struct: true,
+      props: { x: { t: 'int' }, y: { t: 'int' }, magnitude: { t: 'float', ro: true } },
+      methods: { ToString: sig('string') },
+      statics: ['zero', 'one', 'up', 'down', 'left', 'right'].reduce((o, k) => { o[k] = { t: 'Vector2Int', ro: true }; return o; }, {}),
+      staticMethods: { Distance: sig('float', ['Vector2Int', 'Vector2Int']) },
+      ctor: { p: ['int', 'int'], min: 0 }
+    },
     Quaternion: { struct: true, props: {}, methods: {}, statics: { identity: { t: 'Quaternion', ro: true } }, staticMethods: {} },
+    Mouse: { props: { leftButton: { t: 'ButtonControl', ro: true }, rightButton: { t: 'ButtonControl', ro: true }, position: { t: 'Vector2Control', ro: true } }, methods: {}, statics: { current: { t: 'Mouse', ro: true } }, staticMethods: {} },
+    ButtonControl: { props: { isPressed: { t: 'bool', ro: true }, wasPressedThisFrame: { t: 'bool', ro: true }, wasReleasedThisFrame: { t: 'bool', ro: true } }, methods: {} },
+    Vector2Control: { props: {}, methods: { ReadValue: sig('Vector2') } },
+    Camera: {
+      props: { orthographicSize: { t: 'float' }, transform: { t: 'Transform', ro: true } },
+      methods: { ScreenToWorldPoint: sig('Vector3', ['Vector3']), WorldToScreenPoint: sig('Vector3', ['Vector3']) },
+      statics: { main: { t: 'Camera', ro: true } }, staticMethods: {}
+    },
+    PlayerPrefs: {
+      statics: {},
+      staticMethods: {
+        SetInt: sig('void', ['string', 'int']), GetInt: sig('int', ['string', 'int'], 1),
+        SetFloat: sig('void', ['string', 'float']), GetFloat: sig('float', ['string', 'float'], 1),
+        SetString: sig('void', ['string', 'string']), GetString: sig('string', ['string', 'string'], 1),
+        HasKey: sig('bool', ['string']), DeleteKey: sig('void', ['string']), DeleteAll: sig('void'), Save: sig('void')
+      }
+    },
+    JsonUtility: { statics: {}, staticMethods: { ToJson: sig('string', ['?', 'bool'], 1), FromJson: sig('targ', ['string']) } },
     WaitForSeconds: { props: {}, methods: {}, ctor: { p: ['float'], min: 1 } },
     WaitForSecondsRealtime: { props: {}, methods: {}, ctor: { p: ['float'], min: 1 } },
     IEnumerator: { props: {}, methods: {} },
@@ -926,12 +994,12 @@
     KeyControl: { props: { isPressed: { t: 'bool', ro: true }, wasPressedThisFrame: { t: 'bool', ro: true }, wasReleasedThisFrame: { t: 'bool', ro: true } }, methods: {} },
     Transform: {
       props: { position: { t: 'Vector3' }, localScale: { t: 'Vector3' }, gameObject: { t: 'GameObject', ro: true }, name: { t: 'string' } },
-      methods: { Translate: sig('void', ['?', '?', '?'], 1), Rotate: sig('void', ['float', 'float', 'float']) }
+      methods: { Translate: sig('void', ['?', '?', '?'], 1), Rotate: sig('void', ['float', 'float', 'float']), GetComponent: sig('targ'), CompareTag: sig('bool', ['string']) }
     },
     GameObject: {
       props: { name: { t: 'string' }, tag: { t: 'string' }, transform: { t: 'Transform', ro: true }, activeSelf: { t: 'bool', ro: true } },
       methods: { CompareTag: sig('bool', ['string']), SetActive: sig('void', ['bool']), GetComponent: sig('targ') },
-      statics: {}, staticMethods: { FindWithTag: sig('GameObject', ['string']) },
+      statics: {}, staticMethods: { FindWithTag: sig('GameObject', ['string']), FindGameObjectsWithTag: sig('GameObject[]', ['string']) },
       ctor: { p: ['string'], min: 0 }
     },
     Vector3Int: {
@@ -941,7 +1009,13 @@
       ctor: { p: ['int', 'int', 'int'], min: 2 }
     },
     TileBase: { props: { name: { t: 'string', ro: true } }, methods: {} },
-    Tilemap: { props: {}, methods: { SetTile: sig('void', ['Vector3Int', 'TileBase']), HasTile: sig('bool', ['Vector3Int']), ClearAllTiles: sig('void') } },
+    Tilemap: {
+      props: {},
+      methods: {
+        SetTile: sig('void', ['Vector3Int', 'TileBase']), HasTile: sig('bool', ['Vector3Int']), GetTile: sig('TileBase', ['Vector3Int']), ClearAllTiles: sig('void'),
+        WorldToCell: sig('Vector3Int', ['Vector3']), GetCellCenterWorld: sig('Vector3', ['Vector3Int'])
+      }
+    },
     Collider: { props: { gameObject: { t: 'GameObject', ro: true }, tag: { t: 'string' } }, methods: { CompareTag: sig('bool', ['string']) } },
     Collision: { props: { gameObject: { t: 'GameObject', ro: true } }, methods: {} },
     SpriteRenderer: { props: { color: { t: 'Color' }, flipX: { t: 'bool' }, flipY: { t: 'bool' }, enabled: { t: 'bool' }, gameObject: { t: 'GameObject', ro: true } }, methods: {} },
@@ -962,7 +1036,14 @@
     AudioClip: { props: {}, methods: {} },
     TMP_Text: { props: { text: { t: 'string' }, color: { t: 'Color' } }, methods: {} },
     LayerMask: { struct: true, props: {}, methods: {}, statics: {}, staticMethods: { GetMask: sig('int', ['string']) } },
-    Physics2D: { statics: {}, staticMethods: { OverlapCircle: sig('Collider2D', ['Vector2', 'float', '?'], 2) } },
+    Physics2D: {
+      statics: {},
+      staticMethods: {
+        OverlapCircle: sig('Collider2D', ['Vector2', 'float', '?'], 2),
+        OverlapCircleAll: sig('Collider2D[]', ['Vector2', 'float', '?'], 2),
+        OverlapPoint: sig('Collider2D', ['Vector2', '?'], 1)
+      }
+    },
     GameManager: {
       props: { score: { t: 'int', ro: true } }, methods: { AddScore: sig('void', ['int']), GameOver: sig('void'), Restart: sig('void'), LevelComplete: sig('void') },
       statics: { Instance: { t: 'GameManager', ro: true } }, staticMethods: {}
@@ -983,17 +1064,37 @@
   // 需要 using 才能用的型別
   const USING_OF = {
     List: 'System.Collections.Generic', Dictionary: 'System.Collections.Generic', Action: 'System',
+    Stack: 'System.Collections.Generic', Queue: 'System.Collections.Generic', Mouse: 'UnityEngine.InputSystem',
     IEnumerator: 'System.Collections', Keyboard: 'UnityEngine.InputSystem', TMP_Text: 'TMPro', SceneManager: 'UnityEngine.SceneManagement',
     Tilemap: 'UnityEngine.Tilemaps', TileBase: 'UnityEngine.Tilemaps'
   };
   const UNITY_OBJ = new Set(['GameObject', 'Transform', 'SpriteRenderer', 'Rigidbody2D', 'Collider2D', 'Collider', 'Animator', 'AudioSource', 'TMP_Text', 'GameManager']);
   const KNOWN_ATTRS = new Set(['SerializeField', 'Header', 'RequireComponent', 'CreateAssetMenu', 'Range', 'Tooltip', 'HideInInspector', 'Serializable', 'System.Serializable', 'Space', 'TextArea']);
   const tn = (t) => (t === 'mgroup' ? 'method group' : t);
-  const VALUE_TYPES = new Set(['int', 'float', 'double', 'bool', 'char', 'Vector2', 'Vector3', 'Vector3Int','Color', 'Quaternion', 'LayerMask', 'ContactPoint2D', 'Scene']);
+  const VALUE_TYPES = new Set(['int', 'float', 'double', 'bool', 'char', 'Vector2', 'Vector3', 'Vector2Int', 'Vector3Int', 'Color', 'Quaternion', 'LayerMask', 'ContactPoint2D', 'Scene']);
   const NUMERIC = new Set(['int', 'float', 'double', 'char']);
+  let ENUMS = new Set(); // 目前編譯中的程式宣告的 enum 名稱（enum 是值型別）
 
   function baseName(t) { const k = t.indexOf('<'); return k < 0 ? t : t.slice(0, k); }
+  /** 'Dictionary<string, List<int>>' → ['string', 'List<int>'] */
+  function genArgs(t) {
+    const k = t.indexOf('<');
+    if (k < 0 || !t.endsWith('>')) return [];
+    const inner = t.slice(k + 1, -1);
+    const out = [];
+    let depth = 0, cur = '';
+    for (const ch of inner) {
+      if (ch === '<') depth++;
+      if (ch === '>') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
   function listElem(t) { return t.startsWith('List<') ? t.slice(5, -1) : null; }
+  /** List / Stack / Queue 的元素型別 */
+  function colElem(t) { const b = baseName(t); return (b === 'List' || b === 'Stack' || b === 'Queue') && t.endsWith('>') ? genArgs(t)[0] : null; }
   function arrElem(t) { return t.endsWith('[]') ? t.slice(0, -2) : null; }
   function promote(a, b) {
     if (a === 'double' || b === 'double') return 'double';
@@ -1002,10 +1103,12 @@
   }
   function isNum(t) { return NUMERIC.has(t); }
   function isVecT(t) { return t === 'Vector2' || t === 'Vector3'; }
-  function isRefT(t) { return !VALUE_TYPES.has(t); }
+  function isRefT(t) { return !VALUE_TYPES.has(t) && !ENUMS.has(t); }
   function assignable(from, to) {
     if (from === to || from === '?' || to === '?' || to === 'var' || to === 'object') return true;
     if (from === 'null') return isRefT(to);
+    if (from === 'Vector2Int' && (to === 'Vector2' || to === 'Vector3')) return true;
+    if (from === 'Vector3Int' && to === 'Vector3') return true;
     if (from === 'int' && (to === 'float' || to === 'double')) return true;
     if (from === 'char' && (to === 'int' || to === 'float' || to === 'double')) return true;
     if (from === 'float' && to === 'double') return true;
@@ -1031,6 +1134,12 @@
       this.topMethods = new Map();
       for (const m of prog.methods) this.topMethods.set(m.name, m);
       this.usings = new Set(prog.usings);
+      this.enums = new Map();
+      for (const e of prog.enums || []) {
+        if (this.enums.has(e.name)) this.error('CS0101', `The namespace '<global namespace>' already contains a definition for '${e.name}'`, e);
+        this.enums.set(e.name, e);
+      }
+      ENUMS = new Set(this.enums.keys());
       this.scopes = [];
       this.ctx = { cls: null, method: null };
     }
@@ -1042,7 +1151,7 @@
 
     knownType(name) {
       return NUMERIC.has(name) || ['bool', 'string', 'void', 'var', 'object'].includes(name) ||
-        this.classes.has(name) || TYPES[name] !== undefined || name === 'List' || name === 'Action';
+        this.classes.has(name) || this.enums.has(name) || TYPES[name] !== undefined || name === 'List' || name === 'Action';
     }
     usingOk(name, node) {
       if (!this.opts.requireUsings) return true;
@@ -1261,7 +1370,8 @@
           let el = '?';
           if (ct === '?') el = '?';
           else if (arrElem(ct)) el = arrElem(ct);
-          else if (listElem(ct)) el = listElem(ct);
+          else if (colElem(ct)) el = colElem(ct);
+          else if (baseName(ct) === 'Dictionary') el = `KeyValuePair<${genArgs(ct).join(', ')}>`;
           else if (ct === 'string') el = 'char';
           else this.error('CS1579', `foreach statement cannot operate on variables of type '${ct}' because '${ct}' does not contain a public instance or extension definition for 'GetEnumerator'`, s.coll);
           let vt = this.resolveType(s.ty);
@@ -1358,6 +1468,7 @@
       if (g) { e.res = 'global'; e.sig = g; return 'fn'; }
       const gv = this.spec.values && this.spec.values[name];
       if (gv) { e.res = 'global'; return gv; }
+      if (this.enums.has(name)) { e.res = 'enum'; return 'static:' + name; }
       if (TYPES[name] && (TYPES[name].statics || TYPES[name].staticMethods)) {
         if (!this.usingOk(name, e)) {
           this.error('CS0103', `The name '${name}' does not exist in the current context`, e);
@@ -1377,6 +1488,12 @@
       if (st) {
         const T = TYPES[st];
         const at = { line: node.nameLine, col: node.nameCol };
+        const en = this.enums.get(st);
+        if (en) {
+          if (en.members.some((m) => m.name === name)) return st;
+          this.error('CS0117', `'${st}' does not contain a definition for '${name}'`, at);
+          return '?';
+        }
         if (T) {
           if (T.statics && T.statics[name]) return this.propType(T.statics[name], st, name, node);
           if (T.staticMethods && T.staticMethods[name]) { node.sig = T.staticMethods[name]; return 'fn'; }
@@ -1404,11 +1521,14 @@
         if (name === 'Length') return 'int';
         return this.noMember(objT, name, node);
       }
-      const le = listElem(objT);
-      if (le) {
-        const T = TYPES.List;
-        if (T.props[name]) return T.props[name].t;
-        if (T.methods[name]) { node.sig = T.methods[name]; node.elem = le; return 'fn'; }
+      const gb = baseName(objT);
+      if (['List', 'Stack', 'Queue', 'Dictionary', 'KeyValuePair'].includes(gb) && objT.endsWith('>')) {
+        const T = TYPES[gb];
+        const ga = genArgs(objT);
+        const gen = gb === 'Dictionary' || gb === 'KeyValuePair' ? { K: ga[0], V: ga[1] } : { elem: ga[0] };
+        if (T.props[name]) { const t = T.props[name].t; return t === 'K' ? gen.K : t === 'V' ? gen.V : t; }
+        if (T.methods[name]) { node.sig = T.methods[name]; node.elem = gen.elem; node.gen = gen; return 'fn'; }
+        if (name === 'ToString') { node.sig = sig('string'); return 'fn'; }
         return this.noMember(objT, name, node);
       }
       if (objT.startsWith('Action')) {
@@ -1457,16 +1577,21 @@
       return '?';
     }
 
+    genT(t, ctx) {
+      if (t === 'T') return (ctx && ctx.elem) || '?';
+      if (t === 'K') return (ctx && ctx.K) || '?';
+      if (t === 'V') return (ctx && ctx.V) || '?';
+      return t;
+    }
     checkArgs(sigv, args, node, name, ctx) {
-      const types = args.map((a) => (a.k === 'outdecl' ? this.outDecl(a) : this.expr(a)));
+      const types = args.map((a, i) => (a.k === 'outdecl' ? this.outDecl(a, this.genT(sigv.p[i], ctx)) : this.expr(a)));
       const max = sigv.p.length;
       if (types.length < sigv.min || types.length > max) {
         this.error('CS1501', `No overload for method '${name}' takes ${types.length} arguments`, node);
         return types;
       }
       types.forEach((t, i) => {
-        let want = sigv.p[i];
-        if (want === 'T') want = (ctx && ctx.elem) || '?';
+        let want = this.genT(sigv.p[i], ctx);
         if (want === 'num') { if (!isNum(t) && t !== '?') this.error('CS1503', `Argument ${i + 1}: cannot convert from '${tn(t)}' to 'float'`, args[i]); return; }
         if (want === '?') { if (t === 'void') this.error('CS1503', `Argument ${i + 1}: cannot convert from 'void' to 'object'`, args[i]); return; }
         if (!assignable(t, want) && !(want === 'bool' && this.isUnityObj(t))) {
@@ -1477,15 +1602,20 @@
     }
     retOf(sigv, types, node, ctx) {
       if (sigv.r === 'num') return types.reduce((a, b) => (isNum(b) ? promote(a, b) : a), 'int');
-      if (sigv.r === 'T') return (ctx && ctx.elem) || '?';
+      if (sigv.r === 'T' || sigv.r === 'K' || sigv.r === 'V') return this.genT(sigv.r, ctx);
       if (sigv.r === 'targ') {
         const ta = node.targs && node.targs[0];
-        return ta ? this.resolveType(ta) : '?';
+        if (!ta) {
+          this.error('CS0411', `The type arguments for method '${node.name || '?'}<T>' cannot be inferred from the usage. Try specifying the type arguments explicitly.`, { line: node.nameLine || node.line, col: node.nameCol || node.col });
+          return '?';
+        }
+        return this.resolveType(ta);
       }
       return sigv.r;
     }
-    outDecl(a) {
-      const t = this.resolveType(a.ty);
+    outDecl(a, want) {
+      let t = this.resolveType(a.ty);
+      if (t === 'var' && want && want !== '?') t = want;
       a.type = t;
       this.declare(a.name, t, a);
       return t;
@@ -1547,8 +1677,8 @@
               return m ? m.retType : '?';
             }
             if (t === 'mgroup' && c.sig) {
-              const types = this.checkArgs(c.sig, e.args, e, c.name, { elem: c.elem });
-              return this.retOf(c.sig, types, c, { elem: c.elem });
+              const types = this.checkArgs(c.sig, e.args, e, c.name, c.gen || { elem: c.elem });
+              return this.retOf(c.sig, types, c, c.gen || { elem: c.elem });
             }
             e.args.forEach((a) => (a.k === 'outdecl' ? this.outDecl(a) : this.expr(a)));
             if (t !== '?') this.error('CS1955', `Non-invocable member '${c.name}' cannot be used like a method`, { line: c.nameLine, col: c.nameCol });
@@ -1561,6 +1691,11 @@
         case 'index': {
           const ot = this.expr(e.obj);
           const it = this.expr(e.idx);
+          if (ot !== '?' && baseName(ot) === 'Dictionary') {
+            const [K, V] = genArgs(ot);
+            if (!assignable(it, K)) this.convert(it, K, e.idx);
+            return V;
+          }
           if (it !== 'int' && it !== '?' && it !== 'char') this.convert(it, 'int', e.idx);
           if (ot === '?') return '?';
           if (arrElem(ot)) return arrElem(ot);
@@ -1584,6 +1719,9 @@
           } else if (bn === 'List') {
             e.args.forEach((a) => this.expr(a));
             if (e.init) this.arrInit(e.init, t);
+          } else if (bn === 'Stack' || bn === 'Queue' || bn === 'Dictionary') {
+            e.args.forEach((a) => this.expr(a));
+            if (e.init) this.error('CS1922', `Cannot initialize type '${t}' with a collection initializer`, e.init);
           } else if (TYPES[t] && TYPES[t].ctor) {
             this.checkArgs(TYPES[t].ctor, e.args, e, t);
           } else e.args.forEach((a) => this.expr(a));
@@ -1606,7 +1744,7 @@
             return 'bool';
           }
           if (isNum(t)) return t === 'char' ? 'int' : t;
-          if (isVecT(t) && e.op === '-') return t;
+          if ((isVecT(t) || t === 'Vector2Int') && e.op === '-') return t;
           this.error('CS0023', `Operator '${e.op}' cannot be applied to operand of type '${t}'`, e);
           return '?';
         }
@@ -1633,7 +1771,8 @@
         case 'coalesce': { const l = this.expr(e.l); this.expr(e.r); return l; }
         case 'cast': {
           const t = this.expr(e.e);
-          if (t !== '?' && !(isNum(t) && isNum(e.to)) && t !== e.to && e.to !== 'object') {
+          const enumInt = (this.enums.has(t) && e.to === 'int');
+          if (t !== '?' && !enumInt && !(isNum(t) && isNum(e.to)) && t !== e.to && e.to !== 'object') {
             this.error('CS0030', `Cannot convert type '${t}' to '${e.to}'`, e);
           }
           return e.to;
@@ -1661,6 +1800,22 @@
         this.error('CS0019', `Operator '${op}' cannot be applied to operands of type '${l}' and '${r}'`, { line: e.opLine, col: e.opCol });
         return '?';
       };
+      // Vector2Int：同型別相加減還是 Vector2Int；和 Vector2/Vector3 混用時會自動轉成浮點數向量
+      if (l === 'Vector2Int' || r === 'Vector2Int') {
+        const other = l === 'Vector2Int' ? r : l;
+        if (op === '==' || op === '!=') return other === 'Vector2Int' || isVecT(other) || other === 'null' ? 'bool' : bad();
+        if (op === '+' || op === '-') {
+          if (l === r) return 'Vector2Int';
+          if (isVecT(other)) return other;
+          return bad();
+        }
+        if (op === '*') {
+          if (other === 'int') return 'Vector2Int';
+          if (isNum(other)) return 'Vector2';
+          return bad();
+        }
+        return bad();
+      }
       switch (op) {
         case '&&': case '||':
           return l === 'bool' && r === 'bool' ? 'bool' : bad();
@@ -1757,6 +1912,12 @@
     }
     if (typeof v === 'string') return v;
     if (v.kind === 'vec' && v.ty === 'Vector3Int') return `(${v.x}, ${v.y}, ${v.z})`;
+    if (v.kind === 'vec' && v.ty === 'Vector2Int') return `(${v.x}, ${v.y})`;
+    if (v.kind === 'enum') return v.name;
+    if (v.kind === 'stack') return `System.Collections.Generic.Stack\`1[${netName(v.elem)}]`;
+    if (v.kind === 'queue') return `System.Collections.Generic.Queue\`1[${netName(v.elem)}]`;
+    if (v.kind === 'dict') return 'System.Collections.Generic.Dictionary`2';
+    if (v.kind === 'kvp') return `[${fmt(v.k)}, ${fmt(v.v)}]`;
     if (v.kind === 'vec') return v.ty === 'Vector2' ? `(${f2(v.x)}, ${f2(v.y)})` : `(${f2(v.x)}, ${f2(v.y)}, ${f2(v.z)})`;
     if (v.kind === 'color') return `RGBA(${v.r.toFixed(3)}, ${v.g.toFixed(3)}, ${v.b.toFixed(3)}, ${v.a.toFixed(3)})`;
     if (v.kind === 'list') return `System.Collections.Generic.List\`1[${netName(v.elem)}]`;
@@ -1823,6 +1984,13 @@
       this.topMethods = new Map(prog.methods.map((m) => [m.name, m]));
       this.globalEnv = new Env(null, null);
       this.rng = mulberry32(this.opts.seed || 12345);
+      // enum：每個成員都是唯一的物件，比較時直接用 ===
+      this.enums = new Map();
+      for (const e of prog.enums || []) {
+        const vals = new Map();
+        for (const m of e.members) vals.set(m.name, { kind: 'enum', type: e.name, name: m.name, v: m.value });
+        this.enums.set(e.name, vals);
+      }
       this.statics = this.makeStatics();
     }
     log(text, kind) { if (this.host.log) this.host.log(text, kind || 'log'); }
@@ -1884,13 +2052,18 @@
       if (t === 'Vector2') return vec(0, 0);
       if (t === 'Vector3') return vec(0, 0, 0);
       if (t === 'Vector3Int') return vec(0, 0, 0, 'Vector3Int');
+      if (t === 'Vector2Int') return vec(0, 0, 0, 'Vector2Int');
       if (t === 'Color') return color(0, 0, 0, 0);
+      if (this.enums && this.enums.has(t)) {
+        const vals = [...this.enums.get(t).values()];
+        return vals.find((x) => x.v === 0) || vals[0];
+      }
       return null;
     }
     coerce(v, t) {
       if (v && v.kind === 'vec') {
         if (t === 'Vector2' && v.ty !== 'Vector2') return vec(v.x, v.y);
-        if (t === 'Vector3' && v.ty !== 'Vector3') return vec(v.x, v.y, 0);
+        if (t === 'Vector3' && v.ty !== 'Vector3') return vec(v.x, v.y, v.z || 0, 'Vector3');
       }
       if (typeof v === 'number' && t === 'float') return Math.fround(v);
       return v;
@@ -1961,7 +2134,9 @@
           let items;
           let ver = null;
           if (typeof coll === 'string') items = [...coll];
-          else if (coll.kind === 'array' || coll.kind === 'list') { items = coll.items; ver = coll.ver || 0; }
+          else if (coll.kind === 'array' || coll.kind === 'list' || coll.kind === 'queue') { items = coll.items; ver = coll.ver || 0; }
+          else if (coll.kind === 'stack') { items = coll.items.slice().reverse(); ver = coll.ver || 0; }
+          else if (coll.kind === 'dict') { items = [...coll.map.values()].map((p) => ({ kind: 'kvp', k: p.k, v: p.v })); ver = coll.ver || 0; }
           else items = [];
           const n = items.length;
           for (let k = 0; k < n; k++) {
@@ -2077,6 +2252,7 @@
         }
         case 'cast': {
           const v = yield* this.eval(e.e, env);
+          if (e.to === 'int' && v && v.kind === 'enum') return v.v;
           if (e.to === 'int') return typeof v === 'string' ? v.charCodeAt(0) : Math.trunc(v);
           if (e.to === 'float') return Math.fround(v);
           return v;
@@ -2101,7 +2277,13 @@
       if (this.statics[e.name]) return this.statics[e.name];
       if (this.host.statics && this.host.statics[e.name]) return this.host.statics[e.name];
       if (this.classes.has(e.name)) return { kind: 'classref', cls: this.classes.get(e.name) };
+      if (this.enums.has(e.name)) return { kind: 'enumtype', name: e.name, vals: this.enums.get(e.name) };
       throw this.fail('CS0103', `The name '${e.name}' does not exist in the current context`, e);
+    }
+    dictKey(k) {
+      if (k && typeof k === 'object' && k.kind === 'vec') return `v:${k.x},${k.y},${k.z}`;
+      if (k && typeof k === 'object' && k.kind === 'enum') return `e:${k.type}.${k.name}`;
+      return typeof k + ':' + String(k);
     }
     *ref(t, env) {
       const rt = this;
@@ -2128,6 +2310,10 @@
       if (t.k === 'index') {
         const o = yield* this.eval(t.obj, env);
         const i = yield* this.eval(t.idx, env);
+        if (o && o.kind === 'dict') {
+          // Dictionary 用 [] 指定時，沒有這個 key 會自動新增
+          return { get: () => rt.getIndex(o, i, t), set: (v) => { o.map.set(rt.dictKey(i), { k: copy(i), v: copy(v) }); o.ver = (o.ver || 0) + 1; } };
+        }
         rt.getIndex(o, i, t);
         return { get: () => rt.getIndex(o, i, t), set: (v) => { o.items[i] = copy(v); } };
       }
@@ -2145,7 +2331,10 @@
           if (this.findMethod(o.cls, name)) return { kind: 'mgroup', obj: o, method: this.findMethod(o.cls, name) };
           if (o.host && o.host.has && o.host.has(name)) return o.host.get(name, this, node);
           break;
-        case 'list': if (name === 'Count') return o.items.length; break;
+        case 'list': case 'stack': case 'queue': if (name === 'Count') return o.items.length; break;
+        case 'dict': if (name === 'Count') return o.map.size; break;
+        case 'kvp': if (name === 'Key') return o.k; if (name === 'Value') return o.v; break;
+        case 'enumtype': if (o.vals.has(name)) return o.vals.get(name); break;
         case 'array': if (name === 'Length') return o.items.length; break;
         case 'vec': {
           if (name === 'x' || name === 'y' || name === 'z') return o[name];
@@ -2194,6 +2383,11 @@
       if (o.kind === 'list') {
         if (i < 0 || i >= o.items.length) throw this.fail('ArgumentOutOfRangeException', 'Index was out of range. Must be non-negative and less than the size of the collection.', node);
         return o.items[i];
+      }
+      if (o.kind === 'dict') {
+        const p = o.map.get(this.dictKey(i));
+        if (!p) throw this.fail('KeyNotFoundException', `The given key '${fmt(i)}' was not present in the dictionary.`, node);
+        return p.v;
       }
       throw this.fail('CS0021', 'Cannot apply indexing', node);
     }
@@ -2309,6 +2503,42 @@
           }
           break;
         }
+        case 'stack': case 'queue': {
+          const L = o.items;
+          const bump = () => { o.ver = (o.ver || 0) + 1; };
+          const isStack = o.kind === 'stack';
+          const empty = () => this.fail('InvalidOperationException', isStack ? 'Stack empty.' : 'Queue empty.', node);
+          switch (name) {
+            case 'Push': case 'Enqueue': L.push(copy(args[0])); bump(); return undefined;
+            case 'Pop': if (!L.length) throw empty(); bump(); return L.pop();
+            case 'Dequeue': if (!L.length) throw empty(); bump(); return L.shift();
+            case 'Peek': if (!L.length) throw empty(); return isStack ? L[L.length - 1] : L[0];
+            case 'Clear': L.length = 0; bump(); return undefined;
+            case 'Contains': return L.some((x) => this.eq(x, args[0]));
+            default:
+          }
+          break;
+        }
+        case 'dict': {
+          const M = o.map;
+          const bump = () => { o.ver = (o.ver || 0) + 1; };
+          const key = this.dictKey(args[0]);
+          switch (name) {
+            case 'Add':
+              if (M.has(key)) throw this.fail('ArgumentException', `An item with the same key has already been added. Key: ${fmt(args[0])}`, node);
+              M.set(key, { k: copy(args[0]), v: copy(args[1]) }); bump(); return undefined;
+            case 'ContainsKey': return M.has(key);
+            case 'Remove': { const had = M.delete(key); if (had) bump(); return had; }
+            case 'Clear': M.clear(); bump(); return undefined;
+            case 'TryGetValue': {
+              const p = M.get(key);
+              if (args[1] && args[1].kind === 'outref') args[1].set(p ? p.v : this.defaultOf(o.val));
+              return !!p;
+            }
+            default:
+          }
+          break;
+        }
         case 'vec':
           if (name === 'Normalize') { const n = this.getMember(o, 'normalized'); o.x = n.x; o.y = n.y; o.z = n.z; return undefined; }
           if (name === 'ToString') return fmt(o);
@@ -2360,6 +2590,10 @@
         if (e.init) for (const it of e.init.items) L.items.push(copy(yield* this.eval(it, env)));
         return L;
       }
+      if (bn === 'Stack') return { kind: 'stack', elem: genArgs(t)[0], items: [], ver: 0 };
+      if (bn === 'Queue') return { kind: 'queue', elem: genArgs(t)[0], items: [], ver: 0 };
+      if (bn === 'Dictionary') { const [k, v] = genArgs(t); return { kind: 'dict', key: k, val: v, map: new Map(), ver: 0 }; }
+      if (t === 'Vector2Int') return vec(args[0] | 0, args[1] | 0, 0, 'Vector2Int');
       if (t === 'Vector2') return vec(args[0] || 0, args[1] || 0);
       if (t === 'Vector3') return vec(args[0] || 0, args[1] || 0, args[2] || 0, 'Vector3');
       if (t === 'Vector3Int') return vec(args[0] | 0, args[1] | 0, (args[2] || 0) | 0, 'Vector3Int');
@@ -2393,11 +2627,13 @@
       const lv = l && l.kind === 'vec';
       const rv = r && r.kind === 'vec';
       if (lv || rv) {
-        const ty = (lv && l.ty === 'Vector3') || (rv && r.ty === 'Vector3') ? 'Vector3' : 'Vector2';
-        if (op === '+') return vec(l.x + r.x, l.y + r.y, l.z + r.z, ty);
-        if (op === '-') return vec(l.x - r.x, l.y - r.y, l.z - r.z, ty);
-        if (op === '*') { const v = lv ? l : r; const k = lv ? r : l; return vec(v.x * k, v.y * k, v.z * k, v.ty); }
-        if (op === '/') return vec(l.x / r, l.y / r, l.z / r, l.ty);
+        let ty = (lv && l.ty === 'Vector3') || (rv && r.ty === 'Vector3') ? 'Vector3' : 'Vector2';
+        if (resT === 'Vector2Int' || resT === 'Vector2' || resT === 'Vector3') ty = resT;
+        const mk = (x, y, z) => (ty === 'Vector2Int' ? vec(Math.trunc(x), Math.trunc(y), 0, 'Vector2Int') : vec(x, y, ty === 'Vector3' ? z : undefined, ty));
+        if (op === '+') return mk(l.x + r.x, l.y + r.y, l.z + r.z);
+        if (op === '-') return mk(l.x - r.x, l.y - r.y, l.z - r.z);
+        if (op === '*') { const v = lv ? l : r; const k = lv ? r : l; return mk(v.x * k, v.y * k, v.z * k); }
+        if (op === '/') return mk(l.x / r, l.y / r, l.z / r);
       }
       if (typeof l === 'string' && l.length === 1 && lt === 'char') l = l.charCodeAt(0);
       if (typeof r === 'string' && r.length === 1 && rtT === 'char') r = r.charCodeAt(0);
@@ -2507,7 +2743,8 @@
         Debug: S('Debug', {}, {
           Log: (a, node) => { rt.log(logText(a[0], node), 'log'); },
           LogWarning: (a, node) => { rt.log(logText(a[0], node), 'warn'); },
-          LogError: (a, node) => { rt.log(logText(a[0], node), 'error'); }
+          LogError: (a, node) => { rt.log(logText(a[0], node), 'error'); },
+          DrawLine: (a) => { if (rt.host.drawLine) rt.host.drawLine(a[0], a[1], a[2]); }
         }),
         Mathf: S('Mathf', { PI: Math.fround(Math.PI), Infinity: Infinity }, {
           Abs: (a, n) => num(n, Math.abs(a[0])),
@@ -2537,6 +2774,11 @@
         }),
         Vector2: vecStatics('Vector2'),
         Vector3: vecStatics('Vector3'),
+        Vector2Int: S('Vector2Int', {
+          zero: () => vec(0, 0, 0, 'Vector2Int'), one: () => vec(1, 1, 0, 'Vector2Int'),
+          up: () => vec(0, 1, 0, 'Vector2Int'), down: () => vec(0, -1, 0, 'Vector2Int'),
+          left: () => vec(-1, 0, 0, 'Vector2Int'), right: () => vec(1, 0, 0, 'Vector2Int')
+        }, { Distance: (a) => Math.fround(Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y)) }),
         Color: S('Color', Object.keys(COLORS).reduce((o, k) => { o[k] = () => color(...COLORS[k]); return o; }, {}), {}),
         Quaternion: S('Quaternion', { identity: () => ({ kind: 'quat' }) }, {}),
         int: S('int', { MaxValue: 2147483647, MinValue: -2147483648 }, { Parse: (a, node) => { const v = parseInt(a[0], 10); if (isNaN(v)) throw rt.fail('FormatException', 'Input string was not in a correct format.', node); return v; } }),
@@ -2578,6 +2820,6 @@
   }
 
   root.CSQ = {
-    CsError, ZH, tokenize, parse, compile, Runtime, Checker, TYPES, fmt, floatStr, formatError, vec, color, copy, isNullish, mulberry32, sig
+    CsError, ZH, tokenize, parse, compile, Runtime, Checker, TYPES, fmt, floatStr, formatError, vec, color, copy, isNullish, mulberry32, sig, typeStr, genArgs
   };
 })(typeof window !== 'undefined' ? window : globalThis);

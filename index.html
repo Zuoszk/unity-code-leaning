@@ -176,6 +176,10 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
 .chip { border-radius: 999px; padding: 1px 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
 .chip-grid { background: var(--accent-soft); color: var(--accent); }
 .chip-unity { background: var(--good-soft); color: var(--good); }
+.chip-genre { background: var(--coin-soft); color: var(--warn); }
+.genre-head { padding: 18px 4px 2px; display: grid; gap: 4px; }
+.genre-head h2 { font-size: 1.3rem; }
+.genre-head p { color: var(--muted); max-width: 64ch; }
 .nodes { display: flex; flex-wrap: wrap; gap: 8px; align-content: start; }
 .node {
   width: 132px; min-height: 74px; text-align: left;
@@ -201,7 +205,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
 .col-left { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 62px); }
 
 .stage-wrap { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--code-line); background: #1d2333; }
-#stage { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+#stage { display: block; width: 100%; height: auto; image-rendering: pixelated; touch-action: none; }
 .stage-wrap.frozen #stage { filter: grayscale(0.9) brightness(0.65); }
 .freeze {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
@@ -394,6 +398,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
 <script src="js/stage-grid.js"></script>
 <script src="js/stage-unity.js"></script>
 <script src="js/levels.js"></script>
+<script src="js/levels-genres.js"></script>
 <script src="js/workshop.js"></script>
 <script src="js/app.js"></script>
 </body>

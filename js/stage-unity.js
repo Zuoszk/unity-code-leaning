@@ -3,7 +3,8 @@
  */
 (function (root) {
   'use strict';
-  const { compile, Runtime, CsError, fmt, vec, color, formatError, isNullish } = root.CSQ;
+  const CSQ = root.CSQ;
+  const { compile, Runtime, CsError, fmt, vec, color, formatError, isNullish } = CSQ;
 
   const LAYERS = { Default: 0, TransparentFX: 1, 'Ignore Raycast': 2, Ground: 3, Water: 4, UI: 5, Player: 6, Enemy: 7 };
   const GRAVITY = -9.81;
@@ -14,9 +15,15 @@
   };
   function keyNameOf(prop) {
     if (KEYMAP[prop]) return KEYMAP[prop];
+    if (prop === 'tabKey') return 'tab';
+    const d = /^digit(\d)Key$/.exec(prop);
+    if (d) return d[1];
     const m = /^([a-z])Key$/.exec(prop);
     return m ? m[1] : null;
   }
+  const SOLID_KINDS = new Set(['Ground', 'Grass', 'Stone', 'Wood', 'Glass', 'Wall']);
+  const HAZARD_OF = { Spikes: 'spike', Lava: 'lava' };
+  const SCREEN_PPU = 40; // 螢幕座標：1 格 = 40 像素，原點在左下角（和 Unity 一樣）
   function boxOf(e) { return { minX: e.x - e.w / 2, maxX: e.x + e.w / 2, minY: e.y - e.h / 2, maxY: e.y + e.h / 2 }; }
   function overlap(a, b) { return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY; }
 
@@ -43,7 +50,15 @@
       this.keys = new Set();
       this.prevKeys = new Set();
       this.live = !!opts.live;
-      this.stats = { maxObjects: 0, spawned: 0, maxSpeed: 0, reloads: 0, sounds: 0, spawnXs: [], animMax: {}, path: [] };
+      this.stats = { maxObjects: 0, spawned: 0, maxSpeed: 0, reloads: 0, sounds: 0, spawnXs: [], spawnTimes: [], animMax: {}, path: [], tagPath: [], activations: 0, lines: 0 };
+      // 滑鼠：螢幕座標（像素，原點左下）
+      this.mouse = { x: 0, y: 0, left: false, right: false };
+      this.prevMouse = { left: false, right: false };
+      this.liveMouse = { x: 0, y: 0, left: false, right: false };
+      this.lines = [];
+      // PlayerPrefs 存在世界外面，重新載入場景也不會消失
+      this.prefs = opts.prefs || {};
+      for (const [k, v] of Object.entries(def.prefs || {})) if (!(k in this.prefs)) this.prefs[k] = v;
       this.frozen = null;
       this.finished = false;
       this.ui = {};
@@ -78,14 +93,15 @@
       this.W = Math.max(...rows.map((r) => r.length));
       this.solid = [];
       this.hazard = [];
+      this.maps = {};
+      for (let y = 0; y < this.H; y++) { this.solid[y] = new Array(this.W).fill(false); this.hazard[y] = new Array(this.W).fill(null); }
+      // 每個字元對應到哪一層 Tilemap 的哪一種地形
+      const chars = Object.assign({ '#': ['Ground', 'Ground'], '^': ['Ground', 'Spikes'], '~': ['Ground', 'Lava'] }, def.tileChars || {});
       for (let r = 0; r < this.H; r++) {
         const y = this.H - 1 - r;
-        this.solid[y] = [];
-        this.hazard[y] = [];
         for (let x = 0; x < this.W; x++) {
-          const ch = rows[r][x] || '.';
-          this.solid[y][x] = ch === '#';
-          this.hazard[y][x] = ch === '^' ? 'spike' : ch === '~' ? 'lava' : null;
+          const m = chars[rows[r][x]];
+          if (m) this.setCell(m[0], x, y, m[1]);
         }
       }
       for (const k of Object.keys(def.ui || {})) this.ui[k] = { text: def.ui[k] };
@@ -101,12 +117,38 @@
           this.spawn(tpl, x + 0.5 + (tpl.dx || 0), ey + (tpl.dy || 0), true);
         }
       }
-      for (const [hx, hy, kind] of def.hazardAt || []) this.hazard[hy][hx] = kind;
+      for (const [hx, hy, kind] of def.hazardAt || []) this.setCell('Ground', hx, hy, kind === 'spike' ? 'Spikes' : 'Lava');
+      // 長方形區域鋪地形：[地圖名稱, 種類, x0, y0, x1, y1]（含兩端）
+      for (const [map, kind, x0, y0, x1, y1] of def.rects || []) {
+        for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) this.setCell(map, x, y, kind);
+      }
       // 等全部物件都生成後，才接上 Inspector 的參考
       for (const e of this.entities) for (const s of e.scripts) this.applyInspector(e, s);
       this.player = this.entities.find((e) => e.tag === 'Player') || null;
       this.startX = this.player ? this.player.x : 0;
       this.started = false;
+    }
+    setCell(map, x, y, kind) {
+      if (x < 0 || y < 0 || x >= this.W || y >= this.H) return false;
+      if (!this.maps[map]) {
+        this.maps[map] = [];
+        for (let yy = 0; yy < this.H; yy++) this.maps[map][yy] = new Array(this.W).fill(null);
+      }
+      this.maps[map][y][x] = kind || null;
+      let solid = false, hz = null;
+      for (const g of Object.values(this.maps)) {
+        const k = g[y][x];
+        if (SOLID_KINDS.has(k)) solid = true;
+        if (HAZARD_OF[k]) hz = HAZARD_OF[k];
+      }
+      this.solid[y][x] = solid;
+      this.hazard[y][x] = hz;
+      return true;
+    }
+    kindsAt(x, y) {
+      const out = [];
+      for (const g of Object.values(this.maps)) if (g[y][x]) out.push(g[y][x]);
+      return out;
     }
     reload() {
       this.stats.reloads++;
@@ -155,8 +197,13 @@
         return spec;
       }
       if (spec.layer) return 1 << LAYERS[spec.layer];
-      if (spec.tilemap) return this.tilemapHost();
+      if (spec.tilemap) return this.tilemapHost(spec.tilemap);
       if (spec.tile) return this.tileHost(spec.tile);
+      if (spec.tiles) return { kind: 'array', elem: 'TileBase', items: spec.tiles.map((k) => this.tileHost(k)) };
+      if (spec.refs) {
+        const el = type && type.endsWith('[]') ? type.slice(0, -2) : 'Transform';
+        return { kind: 'array', elem: el, items: spec.refs.map((n) => this.resolveRef({ ref: n }, el, self)) };
+      }
       if (spec.ui) { if (!this.ui[spec.ui]) this.ui[spec.ui] = { text: '' }; return this.tmpHost(spec.ui); }
       if (spec.prefab) return this.prefabHost(spec.prefab);
       if (spec.clip) return { __host: true, __type: 'AudioClip', name: spec.clip, get() { return undefined; }, set() {}, call() {}, toString() { return spec.clip + ' (AudioClip)'; } };
@@ -216,6 +263,7 @@
       this.time += sdt;
       this.unscaled += dt;
       this.frame++;
+      this.lines = [];
       this.updateInput();
       // Awake / OnEnable / Start
       for (const e of this.entities.slice()) {
@@ -252,6 +300,10 @@
         if (this.timeScale > 0 && sp > this.stats.maxSpeed) this.stats.maxSpeed = sp;
         if (this.frame % 6 === 0) this.stats.path.push([p.x, p.y]);
       }
+      if (this.def.trackTag) {
+        const te = this.entities.find((e) => !e.destroyed && e.tag === this.def.trackTag);
+        if (te) this.stats.tagPath.push([this.unscaled, te.x, te.y, te.id]);
+      }
       for (const e of this.entities) {
         if (!e.anim) continue;
         for (const [k, v] of Object.entries(e.anim.values)) {
@@ -264,14 +316,36 @@
     /* ---------- 輸入 ---------- */
     updateInput() {
       this.prevKeys = this.keys;
-      if (this.live) this.keys = new Set(this.liveKeys);
-      else {
+      this.prevMouse = { left: this.mouse.left, right: this.mouse.right };
+      if (this.live) {
+        // 在兩幀之間「按下又放開」的按鍵和點擊，也要算按過一次
+        this.keys = new Set([...this.liveKeys, ...(this.keyLatch || [])]);
+        this.keyLatch = new Set();
+        // 滑鼠點擊排隊處理：每一幀處理一次點擊（用點擊當下的位置），兩次點擊之間插一幀「放開」
+        const lm = this.liveMouse;
+        const q = lm.queue || (lm.queue = []);
+        if (this.releaseFrame) {
+          this.mouse = { x: this.mouse.x, y: this.mouse.y, left: false, right: false };
+          this.releaseFrame = false;
+        } else if (q.length) {
+          const c = q.shift();
+          this.mouse = { x: c.x, y: c.y, left: c.btn === 'left', right: c.btn === 'right' };
+          if (q.length || !(lm.left || lm.right)) this.releaseFrame = true;
+        } else {
+          this.mouse = { x: lm.x, y: lm.y, left: lm.left, right: lm.right };
+        }
+      } else {
         const t = this.unscaled;
         const s = new Set();
         for (const [a, b, k] of this.def.input || []) if (t >= a && t < b) s.add(k);
         this.keys = s;
+        // 滑鼠時間軸：[開始時間, 世界 x, 世界 y, 'left' | 'right' | null]
+        let cur = null;
+        for (const m of this.def.mouse || []) if (t >= m[0]) cur = m;
+        if (cur) this.mouse = { x: cur[1] * SCREEN_PPU, y: cur[2] * SCREEN_PPU, left: cur[3] === 'left', right: cur[3] === 'right' };
       }
     }
+    mouseWorld() { return { x: this.mouse.x / SCREEN_PPU, y: this.mouse.y / SCREEN_PPU }; }
 
     /* ---------- 物理 ---------- */
     solidsNear(b) {
@@ -498,6 +572,12 @@
       const w = this;
       return {
         log: (t, k) => w.log(t, k),
+        drawLine: (a, b, col) => {
+          if (!a || !b) return;
+          w.lines.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, color: col || { r: 1, g: 1, b: 1, a: 1 } });
+          w.stats.lines++;
+          w.stats.lastLine = { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+        },
         ctors: {
           GameManager: () => {
             w.warnOnce('newMB', "You are trying to create a MonoBehaviour using the 'new' keyword.  This is not allowed.  MonoBehaviours can only be added using AddComponent(). Alternatively, your script can inherit from ScriptableObject or no base class at all");
@@ -546,7 +626,9 @@
           if (a.length >= 2 && typeof a[0] === 'number') { e.x += a[0]; e.y += a[1]; return; }
           if (a[0] && a[0].kind === 'vec') { e.x += a[0].x; e.y += a[0].y; }
         },
-        Rotate: (a) => { e.rot = (e.rot || 0) + (a[2] || 0); }
+        Rotate: (a) => { e.rot = (e.rot || 0) + (a[2] || 0); },
+        GetComponent: (a, node, targs) => this.getComponent(e, this.targName(targs)),
+        CompareTag: (a) => e.tag === a[0]
       }));
     }
     childTransform(e, child) {
@@ -564,7 +646,15 @@
         activeSelf: { get: () => e.active }
       }, {
         CompareTag: (a) => e.tag === a[0],
-        SetActive: (a) => { e.active = !!a[0]; e.visible = !!a[0]; },
+        SetActive: (a) => {
+          const on = !!a[0];
+          if (e.active === on) return;
+          e.active = on;
+          e.visible = on;
+          if (on) this.stats.activations++;
+          // Unity 會在物件啟用 / 停用時呼叫 OnEnable / OnDisable
+          for (const s of e.scripts.slice()) if (s.awoken) this.callMsg(s, on ? 'OnEnable' : 'OnDisable');
+        },
         GetComponent: (a, node, targs) => this.getComponent(e, this.targName(targs))
       }, () => `${e.name} (UnityEngine.GameObject)`));
     }
@@ -694,29 +784,35 @@
       }
       return this.tiles[kind];
     }
-    tilemapHost() {
-      if (this._tilemapHost) return this._tilemapHost;
+    tilemapHost(name) {
+      name = typeof name === 'string' ? name : 'Ground';
+      if (!this._tilemaps) this._tilemaps = {};
+      if (this._tilemaps[name]) return this._tilemaps[name];
       const w = this;
-      const at = (p) => {
+      const cell = (p, warn) => {
         if (!p || p.kind !== 'vec') return null;
         const x = Math.round(p.x), y = Math.round(p.y);
-        if (x < 0 || y < 0 || x >= w.W || y >= w.H) { w.warnOnce('tile-out', `SetTile：位置 (${x}, ${y}) 超出地圖範圍（寬 ${w.W}、高 ${w.H}），這一格被忽略了。`); return null; }
+        if (x < 0 || y < 0 || x >= w.W || y >= w.H) {
+          if (warn) w.warnOnce('tile-out', `SetTile：格子 (${x}, ${y}) 超出地圖範圍（寬 ${w.W}、高 ${w.H}），這一格被忽略了。`);
+          return null;
+        }
         return { x, y };
       };
-      this._tilemapHost = this.mk('Tilemap', null, {}, {
+      const grid = () => w.maps[name];
+      this._tilemaps[name] = this.mk('Tilemap', null, {}, {
         SetTile: (a) => {
-          const p = at(a[0]);
+          const p = cell(a[0], true);
           if (!p) return;
-          const kind = a[1] ? a[1].tileKind : null;
-          w.solid[p.y][p.x] = kind === 'Ground';
-          w.hazard[p.y][p.x] = kind === 'Spikes' ? 'spike' : kind === 'Lava' ? 'lava' : null;
+          w.setCell(name, p.x, p.y, a[1] ? a[1].tileKind : null);
+          w.stats.setTiles = (w.stats.setTiles || 0) + 1;
         },
-        HasTile: (a) => { const p = at(a[0]); return !!(p && (w.solid[p.y][p.x] || w.hazard[p.y][p.x])); },
-        ClearAllTiles: () => {
-          for (let y = 0; y < w.H; y++) for (let x = 0; x < w.W; x++) { w.solid[y][x] = false; w.hazard[y][x] = null; }
-        }
-      }, () => 'Ground (Tilemap)');
-      return this._tilemapHost;
+        HasTile: (a) => { const p = cell(a[0]); return !!(p && grid() && grid()[p.y][p.x]); },
+        GetTile: (a) => { const p = cell(a[0]); const k = p && grid() && grid()[p.y][p.x]; return k ? w.tileHost(k) : null; },
+        ClearAllTiles: () => { if (grid()) for (let y = 0; y < w.H; y++) for (let x = 0; x < w.W; x++) w.setCell(name, x, y, null); },
+        WorldToCell: (a) => vec(Math.floor(a[0].x), Math.floor(a[0].y), 0, 'Vector3Int'),
+        GetCellCenterWorld: (a) => vec(a[0].x + 0.5, a[0].y + 0.5, 0, 'Vector3')
+      }, () => `${name} (Tilemap)`);
+      return this._tilemaps[name];
     }
     targName(targs) {
       if (!targs || !targs[0]) return '?';
@@ -810,6 +906,7 @@
       const e = this.spawn(tpl, x, y);
       this.stats.spawned++;
       this.stats.spawnXs.push(x);
+      this.stats.spawnTimes.push(this.time);
       for (const s of e.scripts) { s.awoken = true; this.callMsg(s, 'Awake'); this.callMsg(s, 'OnEnable'); }
       return this.goHost(e);
     }
@@ -825,7 +922,12 @@
           if (gm.gameOvers === 1) gm.firstOverAt = this.time;
           if (!gm.over) { gm.over = true; this.timeScale = 0; this.log('[GameManager] Game Over', 'info'); }
           break;
-        case 'LevelComplete': gm.completes++; gm.done = true; this.timeScale = 0; break;
+        case 'LevelComplete':
+          gm.completes++;
+          if (gm.completes === 1) gm.firstDoneAt = this.unscaled;
+          gm.done = true;
+          this.timeScale = 0;
+          break;
         case 'Restart': this.timeScale = 1; this.reloadRequested = true; break;
         default:
       }
@@ -868,6 +970,65 @@
         set() {}, call() {}, toString() { return 'Keyboard:/Keyboard'; }
       };
       const gmInstance = () => (w.gm ? (w._gmHost || (w._gmHost = w.gmHost(false))) : null);
+
+      // 滑鼠與攝影機
+      const btn = (side) => w.mk('ButtonControl', null, {
+        isPressed: { get: () => !!w.mouse[side] },
+        wasPressedThisFrame: { get: () => !!w.mouse[side] && !w.prevMouse[side] },
+        wasReleasedThisFrame: { get: () => !w.mouse[side] && !!w.prevMouse[side] }
+      }, {}, () => `Mouse:/${side}Button`);
+      const posCtl = w.mk('Vector2Control', null, {}, { ReadValue: () => vec(w.mouse.x, w.mouse.y) }, () => 'Mouse:/position');
+      const leftBtn = btn('left');
+      const rightBtn = btn('right');
+      const mouseHost = w.mk('Mouse', null, {
+        leftButton: { get: () => leftBtn }, rightButton: { get: () => rightBtn }, position: { get: () => posCtl }
+      }, {}, () => 'Mouse:/Mouse');
+      const camHost = w.mk('Camera', null, {
+        orthographicSize: { get: () => w.H / 2, set: () => {} },
+        transform: { get: () => null }
+      }, {
+        ScreenToWorldPoint: (a) => vec(a[0].x / SCREEN_PPU, a[0].y / SCREEN_PPU, 0, 'Vector3'),
+        WorldToScreenPoint: (a) => vec(a[0].x * SCREEN_PPU, a[0].y * SCREEN_PPU, 10, 'Vector3')
+      }, () => 'Main Camera (UnityEngine.Camera)');
+
+      // JsonUtility：只處理 public（或 [SerializeField]）欄位，Unity 物件不會被存進去
+      const toJsonValue = (v) => {
+        if (v === null || v === undefined) return null;
+        if (typeof v !== 'object') return v;
+        if (v.kind === 'list' || v.kind === 'array') return v.items.map(toJsonValue);
+        if (v.kind === 'vec') return v.ty === 'Vector2' || v.ty === 'Vector2Int' ? { x: v.x, y: v.y } : { x: v.x, y: v.y, z: v.z };
+        if (v.kind === 'color') return { r: v.r, g: v.g, b: v.b, a: v.a };
+        if (v.kind === 'enum') return v.v;
+        if (v.kind === 'obj') {
+          const o = {};
+          for (const f of v.cls.fields) if (f.isSerialized && !f.isEvent) o[f.name] = toJsonValue(v.fields.get(f.name));
+          return o;
+        }
+        return null;
+      };
+      const fromJsonValue = (d, ty) => {
+        const rt = w.rt;
+        if (ty === 'int') return typeof d === 'number' ? d | 0 : 0;
+        if (ty === 'float' || ty === 'double') return typeof d === 'number' ? d : 0;
+        if (ty === 'string') return typeof d === 'string' ? d : (d === null ? null : String(d));
+        if (ty === 'bool') return !!d;
+        const lt = /^List<(.+)>$/.exec(ty);
+        if (lt) return { kind: 'list', elem: lt[1], items: Array.isArray(d) ? d.map((x) => fromJsonValue(x, lt[1])) : [], ver: 0 };
+        if (ty.endsWith('[]')) { const el = ty.slice(0, -2); return { kind: 'array', elem: el, items: Array.isArray(d) ? d.map((x) => fromJsonValue(x, el)) : [] }; }
+        if (ty === 'Vector2' || ty === 'Vector2Int') return vec((d && d.x) || 0, (d && d.y) || 0, 0, ty);
+        if (ty === 'Vector3' || ty === 'Vector3Int') return vec((d && d.x) || 0, (d && d.y) || 0, (d && d.z) || 0, ty);
+        if (rt.enums.has(ty)) { const vals = [...rt.enums.get(ty).values()]; return vals.find((x) => x.v === d) || vals[0]; }
+        if (rt.classes.has(ty)) {
+          const obj = rt.newInstance(ty, null);
+          if (d && typeof d === 'object') {
+            for (const f of obj.cls.fields) {
+              if (f.isSerialized && !f.isEvent && Object.prototype.hasOwnProperty.call(d, f.name)) obj.fields.set(f.name, fromJsonValue(d[f.name], f.type));
+            }
+          }
+          return obj;
+        }
+        return null;
+      };
       return {
         Time: S('Time', {
           deltaTime: { get: () => Math.fround(w.deltaTime) },
@@ -882,7 +1043,8 @@
           FindWithTag: (a) => {
             const e = w.entities.find((x) => !x.destroyed && x.active && x.tag === a[0]);
             return e ? w.goHost(e) : null;
-          }
+          },
+          FindGameObjectsWithTag: (a) => ({ kind: 'array', elem: 'GameObject', items: w.entities.filter((x) => !x.destroyed && x.active && x.tag === a[0]).map((x) => w.goHost(x)) })
         }),
         Physics2D: S('Physics2D', {}, {
           OverlapCircle: (a) => {
@@ -903,6 +1065,60 @@
               for (const b of w.solidsNear({ minX: p.x - r, maxX: p.x + r, minY: p.y - r, maxY: p.y + r })) if (hit(b)) return w.tilemapCollider();
             }
             return null;
+          },
+          OverlapCircleAll: (a) => {
+            const p = a[0];
+            const r = a[1];
+            const mask = a.length > 2 ? a[2] : ~(1 << 2);
+            const items = [];
+            for (const e of w.entities) {
+              if (e.destroyed || !e.collider || !e.active) continue;
+              if (!(mask & (1 << LAYERS[e.layer]))) continue;
+              const b = boxOf(e);
+              const cx = Math.max(b.minX, Math.min(p.x, b.maxX));
+              const cy = Math.max(b.minY, Math.min(p.y, b.maxY));
+              if ((cx - p.x) ** 2 + (cy - p.y) ** 2 < r * r) items.push(w.colliderHost(e));
+            }
+            return { kind: 'array', elem: 'Collider2D', items };
+          },
+          OverlapPoint: (a) => {
+            const p = a[0];
+            const mask = a.length > 1 ? a[1] : ~(1 << 2);
+            for (const e of w.entities) {
+              if (e.destroyed || !e.collider || !e.active) continue;
+              if (!(mask & (1 << LAYERS[e.layer]))) continue;
+              const b = boxOf(e);
+              if (p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY) return w.colliderHost(e);
+            }
+            const tx = Math.floor(p.x), ty = Math.floor(p.y);
+            if ((mask & (1 << LAYERS.Ground)) && ty >= 0 && ty < w.H && tx >= 0 && tx < w.W && w.solid[ty][tx]) return w.tilemapCollider();
+            return null;
+          }
+        }),
+        Mouse: S('Mouse', { current: { get: () => mouseHost } }, {}),
+        Camera: S('Camera', { main: { get: () => camHost } }, {}),
+        PlayerPrefs: S('PlayerPrefs', {}, {
+          SetInt: (a) => { w.prefs[a[0]] = { t: 'int', v: a[1] | 0 }; },
+          GetInt: (a) => { const p = w.prefs[a[0]]; return p && p.t === 'int' ? p.v : (a.length > 1 ? a[1] : 0); },
+          SetFloat: (a) => { w.prefs[a[0]] = { t: 'float', v: Math.fround(a[1]) }; },
+          GetFloat: (a) => { const p = w.prefs[a[0]]; return p && p.t === 'float' ? p.v : (a.length > 1 ? a[1] : 0); },
+          SetString: (a) => { w.prefs[a[0]] = { t: 'string', v: String(a[1]) }; },
+          GetString: (a) => { const p = w.prefs[a[0]]; return p && p.t === 'string' ? p.v : (a.length > 1 ? a[1] : ''); },
+          HasKey: (a) => Object.prototype.hasOwnProperty.call(w.prefs, a[0]),
+          DeleteKey: (a) => { delete w.prefs[a[0]]; },
+          DeleteAll: () => { for (const k of Object.keys(w.prefs)) delete w.prefs[k]; },
+          Save: () => {}
+        }),
+        JsonUtility: S('JsonUtility', {}, {
+          ToJson: (a) => {
+            if (a[0] === null || a[0] === undefined) throw w.rt.fail('ArgumentException', 'JsonUtility.ToJson does not support engine types.', null);
+            return JSON.stringify(toJsonValue(a[0]), null, a[1] ? 4 : 0);
+          },
+          FromJson: (a, node, targs) => {
+            const ty = targs && targs[0] ? CSQ.typeStr(targs[0]) : '?';
+            let data;
+            try { data = JSON.parse(a[0]); } catch (err) { throw w.rt.fail('ArgumentException', 'JSON parse error: Invalid value.', node); }
+            return fromJsonValue(data, ty);
           }
         }),
         LayerMask: S('LayerMask', {}, { GetMask: (a) => a.reduce((m, n) => m | (LAYERS[n] !== undefined ? 1 << LAYERS[n] : 0), 0) }),
@@ -931,6 +1147,8 @@
         let editable = false;
         if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') { display = v; editable = true; }
         else if (v === null || v === undefined) display = 'None (' + f.type + ')';
+        else if (v.kind === 'array') display = `${v.items.length} 個：${v.items.map((it) => (it && it.name) || fmt(it)).join('、')}`;
+        else if (v.kind === 'enum') display = v.name;
         else if (f.type === 'LayerMask') display = Object.keys(LAYERS).find((k) => v === 1 << LAYERS[k]) || (v ? 'Mixed' : 'Nothing');
         else display = fmt(v);
         if (f.type === 'LayerMask' && typeof v === 'number') { editable = false; display = Object.keys(LAYERS).find((k) => v === 1 << LAYERS[k]) || (v ? 'Mixed' : 'Nothing'); }
@@ -956,7 +1174,8 @@
    * 編譯與執行
    * ========================================================= */
   function prepare(level, code) {
-    const hidden = level.hidden || '';
+    // 隱藏腳本的 using 拿掉，免得「幫」使用者補上他忘了寫的 using
+    const hidden = (level.hidden || '').replace(/^\s*using [^;]+;[ \t]*$/gm, '');
     const userLines = code.split('\n').length;
     const full = hidden ? code + '\n' + hidden : code;
     const comp = compile(full, { requireUsings: true, hiddenFrom: hidden ? userLines + 1 : 0 });
@@ -1044,18 +1263,34 @@
       const Sp = root.Sprites;
       const T = Sp.TILE;
       const Wp = w.W * PPU, Hp = w.H * PPU;
-      const g = c.createLinearGradient(0, 0, 0, Hp);
-      g.addColorStop(0, T.sky);
-      g.addColorStop(1, T.skyLow);
-      c.fillStyle = g;
-      c.fillRect(0, 0, Wp, Hp);
+      if (w.def.bg === 'space') {
+        c.fillStyle = '#0b0e1a';
+        c.fillRect(0, 0, Wp, Hp);
+        c.fillStyle = 'rgba(255,255,255,.7)';
+        for (let k = 0; k < 60; k++) {
+          const sx = (k * 97) % Wp;
+          const sy = ((k * 53 + w.time * (10 + (k % 3) * 12)) % Hp);
+          c.fillRect(sx, sy, k % 5 ? 1.5 : 2.5, k % 5 ? 1.5 : 2.5);
+        }
+      } else {
+        const g = c.createLinearGradient(0, 0, 0, Hp);
+        g.addColorStop(0, T.sky);
+        g.addColorStop(1, T.skyLow);
+        c.fillStyle = g;
+        c.fillRect(0, 0, Wp, Hp);
+      }
       const py = (y) => (w.H - y) * PPU;
+      if (w.def.grid) {
+        c.strokeStyle = 'rgba(255,255,255,.06)';
+        c.lineWidth = 1;
+        for (let x = 0; x <= w.W; x++) { c.beginPath(); c.moveTo(x * PPU + 0.5, 0); c.lineTo(x * PPU + 0.5, Hp); c.stroke(); }
+        for (let y = 0; y <= w.H; y++) { c.beginPath(); c.moveTo(0, y * PPU + 0.5); c.lineTo(Wp, y * PPU + 0.5); c.stroke(); }
+      }
       for (let y = 0; y < w.H; y++) {
         for (let x = 0; x < w.W; x++) {
           const X = x * PPU, Y = py(y + 1);
-          if (w.solid[y][x]) Sp.ground(c, X, Y, PPU, !(y + 1 < w.H && w.solid[y + 1][x]));
-          else if (w.hazard[y][x] === 'spike') Sp.spikes(c, X, Y, PPU, !(y + 1 < w.H && w.solid[y + 1][x]));
-          else if (w.hazard[y][x] === 'lava') Sp.lava(c, X, Y, PPU, performance.now() + x * 300);
+          const topOpen = !(y + 1 < w.H && w.solid[y + 1][x]);
+          for (const kind of w.kindsAt(x, y)) Sp.tile(c, kind, X, Y, PPU, topOpen, performance.now() + x * 300);
         }
       }
       for (const e of w.entities) {
@@ -1075,6 +1310,33 @@
           c.fillStyle = '#ffe08a';
           c.font = '700 16px sans-serif';
           c.fillText('♪', X + size, Y + 4);
+        }
+      }
+      // Debug.DrawLine
+      for (const ln of w.lines) {
+        const col = ln.color;
+        c.strokeStyle = `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${col.a === undefined ? 1 : col.a})`;
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(ln.ax * PPU, py(ln.ay));
+        c.lineTo(ln.bx * PPU, py(ln.by));
+        c.stroke();
+      }
+      // 滑鼠游標
+      if (w.def.showMouse) {
+        const mx = w.mouse.x / SCREEN_PPU * PPU;
+        const my = py(w.mouse.y / SCREEN_PPU);
+        c.strokeStyle = '#ffffff';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(mx - 7, my); c.lineTo(mx + 7, my);
+        c.moveTo(mx, my - 7); c.lineTo(mx, my + 7);
+        c.stroke();
+        if (w.mouse.left || w.mouse.right) {
+          c.strokeStyle = w.mouse.left ? '#7fdcc4' : '#ff8a80';
+          c.beginPath();
+          c.arc(mx, my, 11, 0, Math.PI * 2);
+          c.stroke();
         }
       }
       // UI

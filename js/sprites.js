@@ -218,6 +218,98 @@
       '.kWWWWWWWWk.',
       '..kkkkkkkk..'
     ],
+    crate: [
+      'kkkkkkkkkkkk',
+      'knnnnnnnnnnk',
+      'knkkkkkkkknk',
+      'knkNnnnnNknk',
+      'knknNnnNnknk',
+      'knknnNNnnknk',
+      'knknnNNnnknk',
+      'knknNnnNnknk',
+      'knkNnnnnNknk',
+      'knkkkkkkkknk',
+      'knnnnnnnnnnk',
+      'kkkkkkkkkkkk'
+    ],
+    ship: [
+      '.....kk.....',
+      '....kCck....',
+      '....kCck....',
+      '...kCwwCk...',
+      '...kCwwCk...',
+      '..kCCCCCCk..',
+      '.kCCCCCCCCk.',
+      'kCCdCCCCdCCk',
+      'kCdkCCCCkdCk',
+      'kdk.kRRk.kdk',
+      'kk..krrk..kk',
+      '.....kk.....'
+    ],
+    ufo: [
+      '............',
+      '....kkkk....',
+      '...kcccck...',
+      '..kccWWcck..',
+      '.kkkkkkkkkk.',
+      'kPPPPPPPPPPk',
+      'kPyPPyPPyPPk',
+      '.kkkkkkkkkk.',
+      '...kRkkRk...',
+      '....k..k....',
+      '............',
+      '............'
+    ],
+    tower: [
+      '..k.kk.k....',
+      '..kkkkkk....',
+      '..kddddk....',
+      '..kdkkdk....',
+      '...kddk.....',
+      '...kddk.....',
+      '..kddddk....',
+      '..kdkkdk....',
+      '.kddddddk...',
+      '.kddddddk...',
+      'kddddddddk..',
+      'kkkkkkkkkk..'
+    ].map((r) => '..' + r.slice(0, 10)),
+    castle: [
+      'k.k.kk.k.k..',
+      'kkkkkkkkkk..',
+      'kwwwwwwwwk..',
+      'kwwwwwwwwk..',
+      'kwwkkkkwwk..',
+      'kwwkNNkwwk..',
+      'kwwkNNkwwk..',
+      'kkkkkkkkkk..',
+      '............',
+      '............',
+      '............',
+      '............'
+    ].map((r) => '.' + r.slice(0, 11)),
+    laser: [
+      '...kk...',
+      '..kyyk..',
+      '..kYYk..',
+      '..kYYk..',
+      '..kYYk..',
+      '..kYYk..',
+      '..kook..',
+      '...kk...'
+    ],
+    cursor: [
+      'WW......WW',
+      'W........W',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      '..........',
+      'W........W',
+      'WW......WW'
+    ],
     lever: [
       '............',
       '..........k.',
@@ -405,5 +497,66 @@
     }
   }
 
-  root.Sprites = { draw, SPRITES, TILE, floor, wall, lava, gate, coloredDoor, bridge, spikes, ground };
+  /** 依地形種類畫一格（即時世界的 Tilemap 用） */
+  function tile(ctx, kind, x, y, s, topOpen, t) {
+    switch (kind) {
+      case 'Ground': case 'Grass': ground(ctx, x, y, s, topOpen); break;
+      case 'Wall': wall(ctx, x, y, s); break;
+      case 'Spikes': spikes(ctx, x, y, s, topOpen); break;
+      case 'Lava': lava(ctx, x, y, s, t); break;
+      case 'Stone':
+        ctx.fillStyle = '#8b90a0';
+        ctx.fillRect(x, y, s, s);
+        ctx.fillStyle = '#6e7385';
+        ctx.fillRect(x + s * 0.1, y + s * 0.55, s * 0.35, s * 0.08);
+        ctx.fillRect(x + s * 0.55, y + s * 0.25, s * 0.3, s * 0.08);
+        ctx.strokeStyle = '#5a5f70';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+        break;
+      case 'Wood':
+        ctx.fillStyle = '#a5713c';
+        ctx.fillRect(x, y, s, s);
+        ctx.fillStyle = '#7d5226';
+        for (let k = 1; k < 3; k++) ctx.fillRect(x, y + (k * s) / 3 - 1, s, 2);
+        ctx.fillRect(x + s * 0.3, y, 2, s / 3);
+        ctx.fillRect(x + s * 0.7, y + s / 3, 2, s / 3);
+        ctx.fillRect(x + s * 0.45, y + (2 * s) / 3, 2, s / 3);
+        break;
+      case 'Glass':
+        ctx.fillStyle = 'rgba(170, 225, 255, 0.35)';
+        ctx.fillRect(x, y, s, s);
+        ctx.strokeStyle = 'rgba(220, 245, 255, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+        ctx.beginPath();
+        ctx.moveTo(x + s * 0.25, y + s * 0.7);
+        ctx.lineTo(x + s * 0.7, y + s * 0.25);
+        ctx.stroke();
+        break;
+      case 'Goal':
+        ctx.strokeStyle = '#f2b632';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(x + s * 0.12, y + s * 0.12, s * 0.76, s * 0.76);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x + s * 0.35, y + s * 0.35); ctx.lineTo(x + s * 0.65, y + s * 0.65);
+        ctx.moveTo(x + s * 0.65, y + s * 0.35); ctx.lineTo(x + s * 0.35, y + s * 0.65);
+        ctx.stroke();
+        break;
+      case 'Path':
+        ctx.fillStyle = '#9c8257';
+        ctx.fillRect(x, y, s, s);
+        ctx.fillStyle = 'rgba(0,0,0,.12)';
+        ctx.fillRect(x + s * 0.2, y + s * 0.3, s * 0.12, s * 0.1);
+        ctx.fillRect(x + s * 0.6, y + s * 0.7, s * 0.1, s * 0.1);
+        break;
+      default:
+        ctx.fillStyle = '#c0c4d0';
+        ctx.fillRect(x, y, s, s);
+    }
+  }
+
+  root.Sprites = { draw, SPRITES, TILE, floor, wall, lava, gate, coloredDoor, bridge, spikes, ground, tile };
 })(typeof window !== 'undefined' ? window : globalThis);

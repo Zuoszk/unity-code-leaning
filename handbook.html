@@ -165,7 +165,7 @@ code {
 .xp { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .xp-label { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .xp-label b { font-family: var(--font-display); color: var(--ink); font-size: var(--fs-s); }
-.xp-bar { display: grid; grid-template-columns: repeat(11, 12px); gap: 3px; }
+.xp-bar { display: grid; grid-template-columns: repeat(15, 12px); gap: 3px; }
 .xp-bar i {
   display: block; height: 14px;
   background: var(--surface-2);
@@ -507,7 +507,7 @@ details.answer[open] > summary { margin-bottom: 4px; }
   .chapter h1 { font-size: var(--fs-xl); }
 }
 @media (max-width: 520px) {
-  .xp-bar { grid-template-columns: repeat(11, 8px); gap: 2px; }
+  .xp-bar { grid-template-columns: repeat(15, 7px); gap: 2px; }
   .xp { margin-left: 0; width: 100%; justify-content: space-between; }
   .box { padding: 14px 14px; }
 }
@@ -522,7 +522,7 @@ details.answer[open] > summary { margin-bottom: 4px; }
     </div>
     <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="levels">關卡選單</button>
     <div class="xp" aria-live="polite">
-      <div class="xp-label">已通關 <b id="xpCount">0</b> / 11</div>
+      <div class="xp-label">已通關 <b id="xpCount">0</b> / 15</div>
       <div class="xp-bar" id="xpBar" aria-hidden="true"></div>
     </div>
   </div>
@@ -2735,6 +2735,638 @@ public class CameraFollow : MonoBehaviour
         <li><a href="https://docs.unity3d.com/Manual/index.html" target="_blank" rel="noopener">Unity Manual</a> 和 <a href="https://docs.unity3d.com/ScriptReference/index.html" target="_blank" rel="noopener">Scripting API</a>：查元件和方法的用法。在 VS 裡對著 Unity 的類別按 F12 也能看到說明。</li>
         <li><a href="https://learn.microsoft.com/zh-tw/dotnet/csharp/" target="_blank" rel="noopener">Microsoft C# 文件（繁體中文）</a>：想更深入學 C# 語法時看。</li>
         <li>參加一次 Game Jam（例如 itch.io 上的 jam），在 48 小時內做出一個小遊戲，是進步最快的方法。</li>
+      </ul>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.11 ======================= -->
+<article class="chapter" id="ch11" data-lv="11" data-short="解謎：推箱子" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.11 · 遊戲類型 · 解謎</div>
+    <h1>推箱子：格子移動、推箱、悔一步</h1>
+    <p class="lede">解謎遊戲的核心是「格子」與「規則」。這一章用推箱子（Sokoban）示範三個常用技巧：把資料和畫面分開、推之前先檢查、用 Command 模式做悔一步。</p>
+  </header>
+
+  <section>
+    <h2>邏輯在格子上，畫面跟著格子</h2>
+    <div class="prose">
+      <p>不要用 Rigidbody2D 推箱子，物理引擎會讓箱子歪掉、滑動。解謎遊戲通常自己記住「誰在第幾格」（<code>Vector2Int</code>），規則全部用整數格子判斷，最後才把物件放到格子中心 <code>(x + 0.5, y + 0.5)</code>。</p>
+      <p>場景通常有兩張 <b>Tilemap</b>：一張畫牆壁（Walls）、一張畫目標格（Goals）。用 <code>walls.HasTile(new Vector3Int(x, y, 0))</code> 問某一格是不是牆。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>推箱子的完整規則</h2>
+    <ol class="steps-list">
+      <li><div>算出目標格 <code>target = pos + dir</code>，是牆就不動。</div></li>
+      <li><div>目標格上有箱子的話，再看箱子後面那一格 <code>target + dir</code>：是牆或另一個箱子就推不動。</div></li>
+      <li><div>可以推的話先移動箱子，勇者再前進。</div></li>
+      <li><div>每次移動後檢查：所有箱子都在目標格上就過關。</div></li>
+    </ol>
+    <script type="text/x-code" data-lang="csharp" data-file="SokobanPlayer.cs">
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Tilemaps;
+
+public class SokobanPlayer : MonoBehaviour
+{
+    [SerializeField] private Tilemap walls;
+    private Vector2Int pos;
+
+    void Start()
+    {
+        pos = Vector2Int.FloorToInt(transform.position);
+    }
+
+    void Update()
+    {
+        Vector2Int dir = ReadDirection();
+        if (dir == Vector2Int.zero) return;
+
+        Vector2Int target = pos + dir;
+        if (IsWall(target)) return;
+
+        Collider2D hit = Physics2D.OverlapPoint(CellCenter(target));
+        if (hit != null && hit.CompareTag("Box"))
+        {
+            Vector2Int boxTarget = target + dir;
+            if (IsWall(boxTarget) || Physics2D.OverlapPoint(CellCenter(boxTarget)) != null) return;
+            hit.transform.position = CellCenter(boxTarget);
+        }
+
+        pos = target;
+        transform.position = CellCenter(pos);
+    }
+
+    Vector2Int ReadDirection()
+    {
+        var kb = Keyboard.current;
+        if (kb.rightArrowKey.wasPressedThisFrame) return Vector2Int.right;
+        if (kb.leftArrowKey.wasPressedThisFrame) return Vector2Int.left;
+        if (kb.upArrowKey.wasPressedThisFrame) return Vector2Int.up;
+        if (kb.downArrowKey.wasPressedThisFrame) return Vector2Int.down;
+        return Vector2Int.zero;
+    }
+
+    bool IsWall(Vector2Int c) => walls.HasTile(new Vector3Int(c.x, c.y, 0));
+    Vector3 CellCenter(Vector2Int c) => new Vector3(c.x + 0.5f, c.y + 0.5f, 0f);
+}
+    </script>
+    <div class="prose"><p>箱子要有 BoxCollider2D 和 Tag「Box」，但<b>不需要</b> Rigidbody2D。<code>Vector2Int.FloorToInt</code> 會把小數位置無條件捨去成格子座標。</p></div>
+  </section>
+
+  <section>
+    <h2>悔一步：Command 模式</h2>
+    <div class="prose">
+      <p>Unity 官方的 Design Patterns 教學用 <b>Command 模式</b>做悔一步：把每個動作包成一個物件，裡面有 <code>Execute()</code> 和 <code>Undo()</code>，做過的動作推進 <code>Stack</code>。按悔一步時 Pop 出最後一個，呼叫它的 Undo。</p>
+    </div>
+    <script type="text/x-code" data-lang="csharp" data-file="MoveCommand.cs">
+using System.Collections.Generic;
+using UnityEngine;
+
+public interface ICommand
+{
+    void Execute();
+    void Undo();
+}
+
+public class MoveCommand : ICommand
+{
+    private readonly Transform player, box;
+    private readonly Vector3 playerFrom, playerTo, boxFrom, boxTo;
+
+    public MoveCommand(Transform player, Vector3 to, Transform box = null, Vector3 boxTo = default)
+    {
+        this.player = player;
+        playerFrom = player.position;
+        playerTo = to;
+        this.box = box;
+        if (box != null) { boxFrom = box.position; this.boxTo = boxTo; }
+    }
+
+    public void Execute()
+    {
+        player.position = playerTo;
+        if (box != null) box.position = boxTo;
+    }
+
+    public void Undo()
+    {
+        player.position = playerFrom;
+        if (box != null) box.position = boxFrom;
+    }
+}
+
+public class CommandInvoker
+{
+    private readonly Stack<ICommand> history = new Stack<ICommand>();
+
+    public void Run(ICommand cmd)
+    {
+        cmd.Execute();
+        history.Push(cmd);
+    }
+
+    public void UndoLast()
+    {
+        if (history.Count > 0) history.Pop().Undo();
+    }
+}
+    </script>
+    <div class="prose"><p>遊戲裡的 11-5 用比較簡單的「紀錄類別」做同一件事，概念一樣：<b>改變之前先記下原本的樣子</b>。</p></div>
+  </section>
+
+  <section>
+    <h2>用文字檔蓋關卡</h2>
+    <div class="prose">
+      <p>關卡寫成字串，例如 <code>#</code> 牆、<code>o</code> 目標、<code>B</code> 箱子、<code>P</code> 玩家，用雙層迴圈讀進來。真實專案可以把關卡放在 <code>TextAsset</code>（拖進 Inspector 的 .txt 檔），用 <code>levelText.text.Split('\n')</code> 拆成每一行。記得字串第 0 行在最上面，所以 <code>y = 行數 - 1 - row</code>。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>推箱子</h2>
+      <ul>
+        <li><b>只更新 pos 沒更新 transform</b>：資料變了，畫面沒動。</li>
+        <li><b>沒檢查箱子後面</b>：箱子被推進牆裡，或兩個箱子疊在一起。</li>
+        <li><b>悔一步沒存箱子的位置</b>：玩家退回去了，箱子留在原地。</li>
+        <li><b>Stack 空的時候 Pop</b>：<code>InvalidOperationException: Stack empty</code>，先檢查 Count。</li>
+        <li><b>勝利條件每一幀都觸發</b>：用一個 bool 記住已經過關。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-try">動手練習</span>加上「重做」</h2>
+      <div class="prose"><p>在 CommandInvoker 加第二個 Stack <code>redo</code>：Undo 時把指令推進 redo，按 Y 時從 redo Pop 出來再 Execute 一次。新的動作發生時要清空 redo。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>解謎關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "悔一步最適合用哪一種集合？", "o": ["`Queue`（先進先出）", "`Stack`（後進先出）", "`Dictionary`", "陣列"], "a": 1, "e": "最後做的動作要最先撤銷，正好是 Stack 的後進先出。"},
+  {"q": "推箱子為什麼通常不用 Rigidbody2D？", "o": ["Rigidbody2D 不能用在 2D", "物理會讓箱子滑動、旋轉，格子對不齊", "Rigidbody2D 很貴", "Tilemap 不支援"], "a": 1, "e": "解謎遊戲的規則要精確地以格子判斷，自己控制位置最可靠。"},
+  {"q": "字串陣列第 0 行要放到 Unity 的哪個 y？", "o": ["y = 0", "y = row", "y = 行數 - 1 - row", "y = -row"], "a": 2, "e": "文字從上往下排，Unity 的 y 越往上越大，要翻過來。"}
+]
+      </script>
+    </div>
+  </section>
+
+  <section>
+    <h2>參考資料</h2>
+    <div class="prose">
+      <ul>
+        <li><a href="https://learn.unity.com/course/design-patterns-unity-6/tutorial/use-the-command-pattern-for-flexible-and-extensible-game-systems" target="_blank" rel="noopener">Unity Learn：Use the command pattern（Unity 6）</a></li>
+        <li><a href="https://code.tutsplus.com/unity-2d-tile-based-sokoban-game--cms-29714t" target="_blank" rel="noopener">Tuts+：Unity 2D Tile-Based Sokoban Game</a></li>
+      </ul>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.12 ======================= -->
+<article class="chapter" id="ch12" data-lv="12" data-short="沙盒：蓋方塊" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.12 · 遊戲類型 · 沙盒</div>
+    <h1>方塊沙盒：滑鼠、Tilemap、存檔</h1>
+    <p class="lede">沙盒遊戲讓玩家自由改造世界。這一章學三件事：把滑鼠位置換成格子、用 Tilemap 放和挖方塊、用 JSON 把世界存起來。</p>
+  </header>
+
+  <section>
+    <h2>三種座標</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>座標</th><th>單位</th><th>怎麼拿到</th></tr></thead>
+        <tbody>
+          <tr><td>螢幕座標</td><td>像素，左下角是 (0, 0)</td><td><code>Mouse.current.position.ReadValue()</code></td></tr>
+          <tr><td>世界座標</td><td>Unity 單位（格子）</td><td><code>Camera.main.ScreenToWorldPoint(螢幕座標)</code></td></tr>
+          <tr><td>格子座標</td><td>整數，Vector3Int</td><td><code>tilemap.WorldToCell(世界座標)</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose"><p>正交（Orthographic）攝影機時，ScreenToWorldPoint 的 z 不影響 x、y；透視攝影機要把 z 設成「攝影機到畫面的距離」，例如攝影機在 z = -10 就填 10。換算完記得把 z 設回 0。</p></div>
+  </section>
+
+  <section>
+    <h2>放方塊與挖方塊</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="BlockEditor.cs">
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Tilemaps;
+
+public class BlockEditor : MonoBehaviour
+{
+    [SerializeField] private Tilemap ground;
+    [SerializeField] private TileBase[] palette;   // 在 Inspector 拖進幾種 Tile
+    private int selected;
+
+    void Update()
+    {
+        var kb = Keyboard.current;
+        if (kb.digit1Key.wasPressedThisFrame) selected = 0;
+        if (kb.digit2Key.wasPressedThisFrame) selected = 1;
+        if (kb.digit3Key.wasPressedThisFrame) selected = 2;
+
+        var mouse = Mouse.current;
+        if (mouse.leftButton.wasPressedThisFrame) ground.SetTile(MouseCell(), palette[selected]);
+        if (mouse.rightButton.wasPressedThisFrame && MouseCell().y > 0) ground.SetTile(MouseCell(), null);
+    }
+
+    Vector3Int MouseCell()
+    {
+        Vector3 world = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+        world.z = 0f;
+        return ground.WorldToCell(world);
+    }
+}
+    </script>
+    <div class="prose">
+      <p>Tile 要先在 Project 視窗建立：把圖片拖進 Tile Palette 視窗會自動產生 Tile 資產（.asset），再拖進 palette 陣列。</p>
+      <p>如果有 UI 按鈕疊在畫面上，點按鈕時也會蓋到方塊。用 <code>EventSystem.current.IsPointerOverGameObject()</code> 檢查滑鼠是不是在 UI 上。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>存檔：JsonUtility + PlayerPrefs</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="SaveSystem.cs">
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Tilemaps;
+
+[System.Serializable]
+public class WorldData
+{
+    public List<Vector3Int> cells = new List<Vector3Int>();
+    public List<int> types = new List<int>();
+}
+
+public class SaveSystem : MonoBehaviour
+{
+    [SerializeField] private Tilemap ground;
+    [SerializeField] private TileBase[] palette;
+
+    public void Save()
+    {
+        var data = new WorldData();
+        foreach (Vector3Int cell in ground.cellBounds.allPositionsWithin)
+        {
+            TileBase t = ground.GetTile(cell);
+            if (t == null) continue;
+            data.cells.Add(cell);
+            data.types.Add(System.Array.IndexOf(palette, t));
+        }
+        PlayerPrefs.SetString("world", JsonUtility.ToJson(data));
+        PlayerPrefs.Save();
+    }
+
+    public void Load()
+    {
+        if (!PlayerPrefs.HasKey("world")) return;
+        var data = JsonUtility.FromJson<WorldData>(PlayerPrefs.GetString("world"));
+        ground.ClearAllTiles();
+        for (int i = 0; i < data.cells.Count; i++) ground.SetTile(data.cells[i], palette[data.types[i]]);
+    }
+}
+    </script>
+    <div class="prose">
+      <p><code>JsonUtility</code> 只會存 <b>public</b>（或 <code>[SerializeField]</code>）欄位，類別要加 <code>[System.Serializable]</code>；它不支援 Dictionary，所以這裡用兩個 List。PlayerPrefs 適合小資料，世界很大時改用 <code>File.WriteAllText(Application.persistentDataPath + "/world.json", json)</code> 存成檔案。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>沙盒</h2>
+      <ul>
+        <li><b>直接把螢幕座標當世界座標</b>：物件飛到幾百格外。</li>
+        <li><b>SetTile 傳 Vector3</b>：要先 WorldToCell 換成 Vector3Int。</li>
+        <li><b>按住拖曳時 wasPressedThisFrame 只放一塊</b>：想要「拖曳連續蓋」就改用 isPressed，並避免同一格重複放。</li>
+        <li><b>Dictionary 的 key 打錯</b>：<code>KeyNotFoundException</code>，先用 <code>ContainsKey</code> 或 <code>TryGetValue</code>。</li>
+        <li><b>FromJson 忘了型別</b>：要寫 <code>FromJson&lt;WorldData&gt;(json)</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>沙盒關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "滑鼠的位置要怎麼換成 Tilemap 的格子？", "o": ["直接轉成 int", "ScreenToWorldPoint，再 WorldToCell", "WorldToCell，再 ScreenToWorldPoint", "除以 100"], "a": 1, "e": "螢幕 → 世界 → 格子。"},
+  {"q": "挖掉一格方塊的寫法是？", "o": ["`ground.SetTile(cell, null)`", "`ground.SetTile(cell, 0)`", "`Destroy(cell)`", "`ground.RemoveTile()`"], "a": 0, "e": "Tile 設成 null 就是空的。"},
+  {"q": "JsonUtility 會存哪些欄位？", "o": ["全部欄位", "只有 private", "public 或加了 [SerializeField] 的", "只有 static"], "a": 2, "e": "和 Inspector 會顯示的欄位規則一樣。"}
+]
+      </script>
+    </div>
+  </section>
+
+  <section>
+    <h2>參考資料</h2>
+    <div class="prose">
+      <ul>
+        <li><a href="https://gamedevbeginner.com/how-to-convert-the-mouse-position-to-world-space-in-unity-2d-3d/" target="_blank" rel="noopener">How to convert the mouse position to world space in Unity</a></li>
+        <li><a href="https://docs.unity3d.com/ScriptReference/JsonUtility.html" target="_blank" rel="noopener">Unity ScriptReference：JsonUtility</a></li>
+      </ul>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.13 ======================= -->
+<article class="chapter" id="ch13" data-lv="13" data-short="射擊：太空射擊" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.13 · 遊戲類型 · 射擊</div>
+    <h1>太空射擊：物件池、波次、射擊模式</h1>
+    <p class="lede">射擊遊戲同時有幾十顆子彈和敵人，效能和節奏最重要。這一章學物件池、用協程排敵人波次、用 enum 切換武器，以及用 PlayerPrefs 存最高分。</p>
+  </header>
+
+  <section>
+    <h2>物件池：Unity 內建的 ObjectPool&lt;T&gt;</h2>
+    <div class="prose"><p>不斷 Instantiate / Destroy 會產生記憶體垃圾，GC 回收時遊戲會卡一下。Unity 2021 之後內建 <code>UnityEngine.Pool.ObjectPool&lt;T&gt;</code>：<code>Get()</code> 拿一個（池子空了會自動建立新的），<code>Release()</code> 還回去。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="Gun.cs（官方 ObjectPool 寫法）">
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Pool;
+
+public class Gun : MonoBehaviour
+{
+    [SerializeField] private Bullet bulletPrefab;
+    private IObjectPool<Bullet> pool;
+
+    void Awake()
+    {
+        pool = new ObjectPool<Bullet>(
+            createFunc: () => Instantiate(bulletPrefab),
+            actionOnGet: b => b.gameObject.SetActive(true),
+            actionOnRelease: b => b.gameObject.SetActive(false),
+            actionOnDestroy: b => Destroy(b.gameObject),
+            collectionCheck: true, defaultCapacity: 20, maxSize: 100);
+    }
+
+    void Update()
+    {
+        if (Keyboard.current.spaceKey.wasPressedThisFrame)
+        {
+            Bullet b = pool.Get();
+            b.transform.position = transform.position;
+            b.Init(pool);
+        }
+    }
+}
+
+public class Bullet : MonoBehaviour
+{
+    private IObjectPool<Bullet> pool;
+    public void Init(IObjectPool<Bullet> owner) => pool = owner;
+
+    void Update()
+    {
+        transform.Translate(Vector3.up * 14f * Time.deltaTime);
+        if (transform.position.y > 11f) pool.Release(this);   // 還給池子，不是 Destroy
+    }
+}
+    </script>
+    <div class="prose"><p><code>() =&gt; ...</code> 是 <b>lambda</b>（匿名函式），遊戲裡的直譯器不支援，所以 13-1 用 <code>Queue&lt;GameObject&gt;</code> 手寫同樣的概念。<code>collectionCheck: true</code> 會在你重複 Release 同一顆子彈時報錯，開發時建議打開。</p></div>
+  </section>
+
+  <section>
+    <h2>敵人波次：協程</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="WaveSpawner.cs">
+using System.Collections;
+using UnityEngine;
+
+public class WaveSpawner : MonoBehaviour
+{
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private int waveCount = 5;
+
+    IEnumerator Start()   // Start 本身也可以是協程
+    {
+        for (int wave = 1; wave <= waveCount; wave++)
+        {
+            for (int i = 0; i < wave * 2; i++)
+            {
+                Instantiate(enemyPrefab, new Vector3(Random.Range(-5f, 5f), 6f, 0f), Quaternion.identity);
+                yield return new WaitForSeconds(0.3f);
+            }
+            yield return new WaitUntil(() => GameObject.FindWithTag("Enemy") == null);   // 等這一波清光
+            yield return new WaitForSeconds(1.5f);
+        }
+    }
+}
+    </script>
+    <div class="prose"><p>波次資料多的時候，可以做成 ScriptableObject（每一波的敵人種類、數量、間隔），企劃不用改程式就能調整難度。</p></div>
+  </section>
+
+  <section>
+    <h2>移動模式與射擊模式</h2>
+    <div class="prose">
+      <ul>
+        <li><b>S 形</b>：<code>x = startX + Mathf.Sin(Time.time * 頻率) * 幅度</code>。</li>
+        <li><b>朝玩家衝刺</b>：<code>(player.position - transform.position).normalized * speed</code>。</li>
+        <li><b>射擊模式</b>：<code>enum FireMode { Single, Spread, Laser }</code> 搭配 switch；散射用不同方向的向量，或用 <code>Quaternion.Euler(0, 0, 角度) * Vector3.up</code> 旋轉方向。</li>
+        <li><b>最高分</b>：<code>PlayerPrefs.SetInt("best", Mathf.Max(best, score))</code>。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>射擊遊戲</h2>
+      <ul>
+        <li><b>物件池拿出來沒放回去</b>：池子用完就出錯或一直建立新物件。</li>
+        <li><b>重複 Release 同一個物件</b>：時間到和撞到敵人在同一幀發生，要先檢查 <code>gameObject.activeSelf</code>。</li>
+        <li><b>重複使用的子彈沒有重設狀態</b>：上一輪的速度、血量還在，在 OnEnable 裡重設。</li>
+        <li><b>協程裡忘了 yield</b>：整波敵人在同一幀全部出現。</li>
+        <li><b>兩個 if 互相抵消</b>：切換 enum 時用 if / else 或三元運算子。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>射擊關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "物件池的好處是？", "o": ["子彈飛得比較快", "減少 Instantiate / Destroy 造成的卡頓", "不需要 Collider", "可以不用 Prefab"], "a": 1, "e": "重複使用物件，減少記憶體配置和回收。"},
+  {"q": "ObjectPool 裡把物件還回去的方法是？", "o": ["`Destroy()`", "`Return()`", "`Release()`", "`SetActive(true)`"], "a": 2, "e": "Get 拿出來、Release 還回去。"},
+  {"q": "`enum FireMode { Single, Spread }` 的好處是？", "o": ["執行比較快", "用名字代替意義不明的數字，打錯會編譯錯誤", "可以存小數", "可以放在 Inspector 以外的地方"], "a": 1, "e": "比起 0、1，FireMode.Spread 一看就懂。"}
+]
+      </script>
+    </div>
+  </section>
+
+  <section>
+    <h2>參考資料</h2>
+    <div class="prose">
+      <ul>
+        <li><a href="https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Pool.ObjectPool_1.html" target="_blank" rel="noopener">Unity 6 ScriptReference：Pool.ObjectPool&lt;T&gt;</a></li>
+        <li><a href="https://docs.unity3d.com/ScriptReference/PlayerPrefs.html" target="_blank" rel="noopener">Unity ScriptReference：PlayerPrefs</a></li>
+      </ul>
+    </div>
+  </section>
+</article>
+
+<!-- ======================= LV.14 ======================= -->
+<article class="chapter" id="ch14" data-lv="14" data-short="塔防：路徑與瞄準" hidden>
+  <header class="chapter-head">
+    <div class="eyebrow">LV.14 · 遊戲類型 · 塔防</div>
+    <h1>塔防：路徑點、找最近的敵人、狀態機</h1>
+    <p class="lede">塔防遊戲的三個基本系統：敵人沿路前進、塔自動瞄準、玩家花錢蓋塔。最後介紹狀態機，這也是 RPG 敵人 AI 最常用的寫法。</p>
+  </header>
+
+  <section>
+    <h2>路徑點（Waypoints）</h2>
+    <div class="prose"><p>在路線的每個轉角放一個空物件，依序拖進敵人的 <code>Transform[] waypoints</code>。敵人用 <code>MoveTowards</code> 走向目前的點，距離夠近就換下一個。比較浮點數時不要用 <code>==</code>，用「距離小於一個很小的數」。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="EnemyPath.cs">
+using UnityEngine;
+
+public class EnemyPath : MonoBehaviour
+{
+    [SerializeField] private Transform[] waypoints;
+    [SerializeField] private float speed = 3f;
+    private int index;
+
+    void Update()
+    {
+        if (index >= waypoints.Length)
+        {
+            FindFirstObjectByType<BaseHealth>().TakeDamage(1);
+            Destroy(gameObject);
+            return;
+        }
+
+        Vector3 target = waypoints[index].position;
+        transform.position = Vector3.MoveTowards(transform.position, target, speed * Time.deltaTime);
+        if (Vector3.Distance(transform.position, target) < 0.05f) index++;
+    }
+}
+    </script>
+    <div class="prose"><p>生成的敵人（Prefab）沒辦法在 Inspector 直接拖場景裡的路徑點。常見做法是由生成器在 Instantiate 之後把 waypoints 傳給敵人，或把路徑做成一個 <code>Path</code> 元件讓敵人去找。複雜地形可以改用 NavMesh 或 A* 尋路。</p></div>
+  </section>
+
+  <section>
+    <h2>塔：找範圍內最近的敵人</h2>
+    <script type="text/x-code" data-lang="csharp" data-file="Tower.cs">
+using UnityEngine;
+
+public class Tower : MonoBehaviour
+{
+    [SerializeField] private float range = 4f;
+    [SerializeField] private LayerMask enemyLayer;
+    [SerializeField] private float fireRate = 0.5f;
+    private float cooldown;
+
+    void Update()
+    {
+        cooldown -= Time.deltaTime;
+        Transform target = FindNearest();
+        if (target == null || cooldown > 0f) return;
+
+        target.GetComponent<EnemyHealth>().TakeDamage(1);
+        cooldown = fireRate;
+    }
+
+    Transform FindNearest()
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, range, enemyLayer);
+        Transform nearest = null;
+        float best = float.MaxValue;
+        foreach (Collider2D h in hits)
+        {
+            float d = ((Vector2)h.transform.position - (Vector2)transform.position).sqrMagnitude;
+            if (d < best) { best = d; nearest = h.transform; }
+        }
+        return nearest;
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.DrawWireSphere(transform.position, range);   // 在 Scene 視窗畫出射程
+    }
+}
+    </script>
+    <div class="prose"><p>用 <code>sqrMagnitude</code>（距離的平方）比較大小可以省掉開根號，結果一樣。很多塔防會讓玩家選瞄準規則：最近、血最少、走最遠的，只要換掉比較的條件。</p></div>
+  </section>
+
+  <section>
+    <h2>狀態機（Finite State Machine）</h2>
+    <div class="prose"><p>把物件可能的狀態列成 enum，每一幀只執行目前狀態的程式，滿足條件就切換。好處是每種狀態的程式分開，不會變成一大串互相糾纏的 if。RPG 的敵人通常是：巡邏 → 發現玩家就追擊 → 距離夠近就攻擊 → 玩家跑遠就回去巡邏。</p></div>
+    <script type="text/x-code" data-lang="csharp" data-file="EnemyAI.cs（RPG 敵人）">
+using UnityEngine;
+
+public enum EnemyState { Patrol, Chase, Attack }
+
+public class EnemyAI : MonoBehaviour
+{
+    [SerializeField] private Transform player;
+    [SerializeField] private float sightRange = 5f, attackRange = 1f;
+    private EnemyState state = EnemyState.Patrol;
+
+    void Update()
+    {
+        float d = Vector2.Distance(transform.position, player.position);
+        switch (state)
+        {
+            case EnemyState.Patrol:
+                Patrol();
+                if (d < sightRange) state = EnemyState.Chase;
+                break;
+            case EnemyState.Chase:
+                transform.position = Vector2.MoveTowards(transform.position, player.position, 3f * Time.deltaTime);
+                if (d < attackRange) state = EnemyState.Attack;
+                else if (d > sightRange * 1.5f) state = EnemyState.Patrol;
+                break;
+            case EnemyState.Attack:
+                Attack();
+                if (d > attackRange) state = EnemyState.Chase;
+                break;
+        }
+    }
+
+    void Patrol() { /* 在兩點之間來回 */ }
+    void Attack() { /* 播動畫、扣血、進入冷卻 */ }
+}
+    </script>
+    <div class="prose"><p>追擊的「放棄距離」比「發現距離」大一點（這裡是 1.5 倍），可以避免玩家剛好站在邊界時敵人一直切來切去。</p></div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-bad">常見錯誤</span>塔防</h2>
+      <ul>
+        <li><b>每一幀都 index++</b>：路徑點全部被跳過，要先判斷到了沒。</li>
+        <li><b>走到終點沒刪除</b>：敵人停在終點，每一幀都扣一次血。</li>
+        <li><b>OverlapCircleAll 沒指定圖層</b>：塔把自己也算成目標。</li>
+        <li><b>直接拿 hits[0]</b>：陣列順序和距離無關。</li>
+        <li><b>狀態裡的計時器沒倒數</b>：物件永遠卡在某個狀態。</li>
+        <li><b>蓋塔沒檢查</b>：路上、已經有塔的格子、錢不夠，都要先擋掉。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="box">
+      <h2><span class="tag tag-quiz">小測驗</span>塔防關卡</h2>
+      <script type="application/json" class="quiz-data">
+[
+  {"q": "敵人什麼時候換下一個路徑點？", "o": ["每一幀", "每秒一次", "和目前的路徑點距離夠近時", "被打到時"], "a": 2, "e": "用 Vector3.Distance 判斷到了沒。"},
+  {"q": "找最近的敵人時，最近距離一開始要設成？", "o": ["0", "一個很大的數，例如 Mathf.Infinity", "-1", "射程"], "a": 1, "e": "從很大開始，第一個敵人一定會比它小。"},
+  {"q": "狀態機最適合用哪種語法來寫？", "o": ["enum 加 switch", "很多個 bool", "while 迴圈", "try / catch"], "a": 0, "e": "enum 列出狀態，switch 每次只執行一種。"}
+]
+      </script>
+    </div>
+  </section>
+
+  <section>
+    <h2>參考資料</h2>
+    <div class="prose">
+      <ul>
+        <li><a href="https://www.kodeco.com/269-how-to-create-a-tower-defense-game-in-unity-part-1" target="_blank" rel="noopener">Kodeco：How to Create a Tower Defense Game in Unity（Part 1、Part 2）</a></li>
+        <li><a href="https://docs.unity3d.com/ScriptReference/Physics2D.OverlapCircleAll.html" target="_blank" rel="noopener">Unity ScriptReference：Physics2D.OverlapCircleAll</a></li>
       </ul>
     </div>
   </section>

@@ -2424,7 +2424,16 @@
     if (r.outcome === 'compile') return r.errors.map((e) => `${e.code} ${e.message} @${e.line}:${e.col}`).join('\n');
     return (r.msg || '') + (r.err ? ` [${r.err.code}: ${r.err.message} @${r.err.line}]` : '');
   }
-  root.CSQLevels = { WORLDS, LEVELS: L, HANDBOOK, runLevel, outcomeOf };
+  root.CSQLevels = {
+    WORLDS, LEVELS: L, HANDBOOK, runLevel, outcomeOf,
+    helpers: { cs, rep, dedent, T, U, HID, reachCheck },
+    /** 讓其他檔案加入新的世界和關卡（js/levels-genres.js） */
+    addWorlds(worlds, levels) {
+      for (const w of worlds) WORLDS.push(w);
+      for (const lv of levels) { lv.kind = lv.kind || 'unity'; lv.file = lv.file || 'Hero.cs'; L.push(lv); }
+      L.forEach((lv, i) => { lv.index = i; lv.handbook = HANDBOOK + '#' + WORLDS.find((w) => w.id === lv.world).ch; });
+    }
+  };
   root.CSQLevelTest = function (test) {
     for (const lv of L) {
       test(`關卡 ${lv.id} 標準答案過關`, () => {

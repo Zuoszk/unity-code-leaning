@@ -44,7 +44,14 @@
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const starsOf = (id) => S.stars[id] || 0;
-  const unlocked = (lv) => S.unlockAll || lv.index === 0 || starsOf(LEVELS[lv.index - 1].id) > 0;
+  // 遊戲類型挑戰（W11 以後）：完成 6-5 就能開始任何一個類型，世界裡一關接一關解鎖
+  const GENRE_GATE = '6-5';
+  const unlocked = (lv) => {
+    if (S.unlockAll || lv.index === 0) return true;
+    const prev = LEVELS[lv.index - 1];
+    if (lv.world >= 11 && prev.world !== lv.world) return starsOf(GENRE_GATE) > 0;
+    return starsOf(prev.id) > 0;
+  };
   function starsHtml(n, total) {
     let s = '';
     for (let i = 0; i < (total || 3); i++) s += `<span class="${i < n ? 'on' : ''}">★</span>`;
@@ -233,6 +240,14 @@
         next ? el('a', { class: 'btn btn-primary', href: '#L' + next.id }, `繼續：${next.id} ${next.title}`) : el('span', { class: 'chip chip-unity' }, '全部通關！')));
     const worlds = el('div', { class: 'worlds' });
     for (const w of WORLDS) {
+      if (w.genre && !worlds.querySelector('.genre-head')) {
+        const gateOk = starsOf(GENRE_GATE) > 0 || S.unlockAll;
+        worlds.appendChild(el('div', { class: 'genre-head' },
+          el('h2', null, '遊戲類型挑戰'),
+          el('p', null, gateOk
+            ? '用 Unity 做出不同類型的遊戲：解謎、沙盒、射擊、塔防。四個世界可以照自己喜歡的順序玩。'
+            : `完成 ${GENRE_GATE}（重力山谷的最後一關）之後解鎖。這裡會用到前面學的輸入、物理和協程。`)));
+      }
       const lvls = LEVELS.filter((l) => l.world === w.id);
       const got = lvls.reduce((s, l) => s + starsOf(l.id), 0);
       const nodes = el('div', { class: 'nodes' }, lvls.map((l) => {
@@ -251,7 +266,7 @@
           el('span', { class: 'world-name' }, w.name),
           el('span', { class: 'world-sub' }, w.sub),
           el('div', { class: 'world-meta' },
-            el('span', { class: `chip ${w.id <= 3 ? 'chip-grid' : 'chip-unity'}` }, w.id <= 3 ? '格子迷宮' : 'Unity 模擬'),
+            el('span', { class: `chip ${w.id <= 3 ? 'chip-grid' : w.genre ? 'chip-genre' : 'chip-unity'}` }, w.id <= 3 ? '格子迷宮' : w.genre ? w.sub : 'Unity 模擬'),
             el('span', null, `★ ${got} / ${lvls.length * 3}`))),
         nodes));
     }
@@ -327,7 +342,7 @@
     const tabChoice = el('button', { class: 'tab', role: 'tab', type: 'button' }, '用選的');
     const runBtn = el('button', { class: 'btn btn-run', type: 'button' }, '▶ 執行');
     const speedBtn = el('button', { class: 'btn', type: 'button', title: '播放速度' }, '速度 1×');
-    const liveBtn = el('button', { class: 'btn', type: 'button', hidden: !(isUnity && lv.keys) }, '自己玩');
+    const liveBtn = el('button', { class: 'btn', type: 'button', hidden: !(isUnity && (lv.keys || lv.mouseLevel)) }, '自己玩');
     const hintBtn = el('button', { class: 'btn', type: 'button' }, '提示');
     const toolbar = el('div', { class: 'toolbar' }, el('div', { class: 'tabs', role: 'tablist' }, tabCode, tabChoice), el('span', { class: 'spacer' }), hintBtn, speedBtn, liveBtn, runBtn);
     const editor = new Editor(lv.file, (v) => {
@@ -618,7 +633,9 @@
     cur.keysRow.hidden = !live;
     cur.stageNote.hidden = !live;
     if (live) {
-      cur.stageNote.textContent = '自由練習：用鍵盤或下面的按鈕操作（先點一下遊戲畫面以外的地方，不要停在編輯器裡）。按「執行」才會判定過關。';
+      cur.stageNote.textContent = lv.mouseLevel
+        ? '自由練習：用滑鼠在遊戲畫面上點（左鍵、右鍵都可以）' + (lv.keys ? '，也可以按鍵盤或下面的按鈕' : '') + '。按「執行」才會判定過關。'
+        : '自由練習：用鍵盤或下面的按鈕操作（先點一下遊戲畫面以外的地方，不要停在編輯器裡）。按「執行」才會判定過關。';
       renderKeys();
     }
     const start = () => {
@@ -684,17 +701,60 @@
     const k = keyOf(e);
     if (!k) return;
     if (k === 'space' || k.length > 1) e.preventDefault();
-    cur.worlds.forEach((w) => { if (e.type === 'keydown') w.liveKeys.add(k); else w.liveKeys.delete(k); });
+    cur.worlds.forEach((w) => {
+      if (e.type === 'keydown') { w.liveKeys.add(k); (w.keyLatch || (w.keyLatch = new Set())).add(k); }
+      else w.liveKeys.delete(k);
+    });
     const b = cur.keysRow.querySelector(`[data-k="${k}"]`);
     if (b) b.classList.toggle('down', e.type === 'keydown');
   }
-  function attachKeys() { window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); }
-  function detachKeys() { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); }
+  // 滑鼠：換算成 Unity 的螢幕座標（像素、原點在左下角，1 格 = 40 像素）
+  function onMouse(e) {
+    if (!cur || !cur.live || !cur.worlds || !cur.canvas) return;
+    const w0 = cur.worlds[0];
+    const r = cur.canvas.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * w0.W * 40;
+    const y = ((r.bottom - e.clientY) / r.height) * w0.H * 40;
+    for (const w of cur.worlds) {
+      w.liveMouse.x = x;
+      w.liveMouse.y = y;
+      if (e.type === 'pointerdown') {
+        const btn = e.button === 2 ? 'right' : 'left';
+        w.liveMouse[btn] = true;
+        (w.liveMouse.queue || (w.liveMouse.queue = [])).push({ x, y, btn });
+      }
+      if (e.type === 'pointerup' || e.type === 'pointerleave') { if (e.button === 2) w.liveMouse.right = false; else w.liveMouse.left = false; if (e.type === 'pointerleave') { w.liveMouse.left = false; w.liveMouse.right = false; } }
+    }
+    if (e.type === 'pointerdown') e.preventDefault();
+  }
+  const noMenu = (e) => { if (cur && cur.live) e.preventDefault(); };
+  function attachKeys() {
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    if (cur && cur.canvas) {
+      for (const t of ['pointermove', 'pointerdown', 'pointerup', 'pointerleave']) cur.canvas.addEventListener(t, onMouse);
+      cur.canvas.addEventListener('contextmenu', noMenu);
+    }
+  }
+  function detachKeys() {
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('keyup', onKey);
+    if (cur && cur.canvas) {
+      for (const t of ['pointermove', 'pointerdown', 'pointerup', 'pointerleave']) cur.canvas.removeEventListener(t, onMouse);
+      cur.canvas.removeEventListener('contextmenu', noMenu);
+    }
+  }
   function renderKeys() {
     const keys = cur.lv.keys || [];
     cur.keysRow.replaceChildren(...keys.map((k) => {
-      const b = el('button', { class: 'key', type: 'button', 'data-k': k }, k === 'space' ? 'Space' : k.toUpperCase());
-      const set = (down) => { if (cur && cur.worlds) cur.worlds.forEach((w) => { if (down) w.liveKeys.add(k); else w.liveKeys.delete(k); }); b.classList.toggle('down', down); };
+      const label = { space: 'Space', left: '←', right: '→', up: '↑', down: '↓' }[k] || k.toUpperCase();
+      const b = el('button', { class: 'key', type: 'button', 'data-k': k, 'aria-label': k }, label);
+      const set = (down) => {
+        if (cur && cur.worlds) cur.worlds.forEach((w) => {
+          if (down) { w.liveKeys.add(k); (w.keyLatch || (w.keyLatch = new Set())).add(k); } else w.liveKeys.delete(k);
+        });
+        b.classList.toggle('down', down);
+      };
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); set(true); });
       b.addEventListener('pointerup', () => set(false));
       b.addEventListener('pointercancel', () => set(false));
