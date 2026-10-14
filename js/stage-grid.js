@@ -463,6 +463,7 @@
       const h = this.st.hero;
       for (const ev of events) {
         if (this.abort) return;
+        if (opts.onEvent) opts.onEvent(ev);
         const D = (ms) => ms / sp();
         switch (ev.t) {
           case 'move': {

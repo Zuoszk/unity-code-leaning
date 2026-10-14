@@ -512,6 +512,7 @@ details.answer[open] > summary { margin-bottom: 4px; }
   .box { padding: 14px 14px; }
 }
 </style>
+<link rel="stylesheet" href="css/pixel.css">
 </head>
 <body>
 <header class="topbar">
@@ -521,6 +522,7 @@ details.answer[open] > summary { margin-bottom: 4px; }
       <div class="brand-sub">從 Python 跨到 C#，一關一關做出 2D 遊戲</div>
     </div>
     <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="levels">關卡選單</button>
+    <button class="menu-btn px-sound" id="soundBtn" type="button" aria-pressed="true" aria-label="音效">♪<span class="px-sound-label"> 音效</span></button>
     <div class="xp" aria-live="polite">
       <div class="xp-label">已通關 <b id="xpCount">0</b> / 15</div>
       <div class="xp-bar" id="xpBar" aria-hidden="true"></div>
@@ -3376,8 +3378,35 @@ public class EnemyAI : MonoBehaviour
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="js/sfx.js"></script>
 <script>
 (function () {
+  /* ---------- 8-bit 音效和 LEVEL UP 提示 ---------- */
+  function sfx(name) { if (window.SFX) window.SFX.play(name); }
+  function toast(text) {
+    var old = document.querySelector(".px-toast");
+    if (old) old.remove();
+    var t = document.createElement("div");
+    t.className = "px-toast px-win";
+    t.setAttribute("role", "status");
+    t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2500);
+  }
+  var soundBtn = document.getElementById("soundBtn");
+  function syncSound() {
+    var on = !!(window.SFX && window.SFX.enabled);
+    soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    soundBtn.title = on ? "音效：開（按一下關掉）" : "音效：關（按一下打開）";
+  }
+  soundBtn.addEventListener("click", function () {
+    if (!window.SFX) return;
+    window.SFX.enabled = !window.SFX.enabled;
+    syncSound();
+    sfx("select");
+  });
+  syncSound();
+
   var KEY = "unity-cs-handbook-v1";
   var state = { done: {}, quiz: {}, check: {}, last: null };
   try {
@@ -3568,6 +3597,7 @@ public class EnemyAI : MonoBehaviour
         b.className = "opt";
         b.innerHTML = '<span class="mark"></span>' + md(text);
         b.addEventListener("click", function () {
+          sfx(oi === item.a ? "right" : "wrong");
           if (!state.quiz[ch.id]) state.quiz[ch.id] = {};
           state.quiz[ch.id][qi] = oi;
           save();
@@ -3694,6 +3724,10 @@ public class EnemyAI : MonoBehaviour
         coin.classList.remove("pop");
         void coin.offsetWidth;
         coin.classList.add("pop");
+        sfx("levelup");
+        toast("LEVEL UP!  LV." + ch.dataset.lv + " 通關");
+      } else {
+        sfx("select");
       }
     });
     paintDone();

@@ -368,6 +368,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
+<link rel="stylesheet" href="css/pixel.css">
 </head>
 <body>
 <header class="top">
@@ -375,6 +376,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
     <a class="logo" href="#map" aria-label="回到地圖"><canvas id="logoIcon" width="12" height="12" aria-hidden="true"></canvas>C# <span>小勇者</span></a>
     <div class="top-stars" title="總星星數">★ <b id="starCount">0</b> / <span id="starTotal">0</span></div>
     <a class="top-link" href="handbook.html" target="_blank" rel="noopener">闖關手冊（講義）</a>
+    <button class="btn btn-sm px-sound" type="button" id="soundBtn" aria-pressed="true" aria-label="音效" title="音效開關">♪<span class="px-sound-label"> 音效</span></button>
     <button class="btn btn-sm" type="button" id="settingsBtn">設定</button>
   </div>
 </header>
@@ -385,6 +387,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
   <div class="dialog" role="dialog" aria-labelledby="settingsTitle">
     <h2 id="settingsTitle">設定</h2>
     <label class="switch"><input type="checkbox" id="unlockAll"> 全部關卡解鎖（可以直接跳關）</label>
+    <label class="switch"><input type="checkbox" id="soundOn"> 8-bit 音效</label>
     <div class="row">
       <button class="btn" type="button" id="resetBtn">清除所有進度</button>
       <button class="btn btn-primary" type="button" id="settingsClose">完成</button>
@@ -393,6 +396,7 @@ main { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 2
   </div>
 </div>
 
+<script src="js/sfx.js"></script>
 <script src="js/interpreter.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/stage-grid.js"></script>

@@ -17,6 +17,8 @@
 - **工作坊**：場景（`LevelBuilder`）、人物（`PlayerController`）、敵人（`EnemyPatrol`）三份完整腳本，可以改程式、在 Inspector 調數值，再用鍵盤實際玩。
 - **闖關手冊**（`handbook.html`）：每一關都能連回對應章節的講義。四種遊戲類型各有一章，附上真實 Unity 的寫法（例如官方 `ObjectPool<T>`、Command 模式）。
 
+- **8-bit 像素 RPG 外觀**：開場畫面、RPG 對話視窗、STAGE CLEAR 過關動畫，以及用 Web Audio 即時合成的 8-bit 音效（右上角 ♪ 可以關掉）。深淺色跟著系統設定：夜晚是深藍視窗，白天是羊皮紙。
+
 > 這是教學用的 C# 子集直譯器，只支援課程用到的語法和 Unity API，不是完整的 C# 或 Unity。
 
 ## 在自己的電腦上執行
@@ -42,7 +44,10 @@ python -m http.server 8000
 | `js/levels.js` | 關卡資料（說明、地圖、起始程式、參考答案、選項、提示） |
 | `js/levels-genres.js` | 遊戲類型挑戰的 23 關（推箱子、沙盒、射擊、塔防） |
 | `js/workshop.js` | 工作坊的三份腳本和場景 |
-| `js/app.js` | 畫面、編輯器、Console、Inspector、進度存檔 |
+| `js/app.js` | 畫面、編輯器、Console、Inspector、進度存檔、開場畫面、過關動畫 |
+| `js/sfx.js` | 8-bit 音效（Web Audio 合成，不需要音檔），遊戲和手冊共用 |
+| `css/pixel.css` | 像素 RPG 外觀，遊戲和手冊共用 |
+| `fonts/Cubic_11.woff2` | 俐方體 11 號（[Cubic 11](https://github.com/ACh-K/Cubic-11)）中文像素字型，SIL Open Font License，見 `fonts/OFL.txt` |
 | `tests.html` | 自動測試 |
 
 ## 測試

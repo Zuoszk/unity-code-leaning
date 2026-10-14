@@ -42,6 +42,13 @@
     return e;
   }
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const sfx = (name) => { if (window.SFX) window.SFX.play(name); };
+  // 用像素圖畫一個小 canvas（頭像、開場畫面）
+  function spriteCanvas(name, cls) {
+    const c = el('canvas', { class: cls, width: 12, height: 12, 'aria-hidden': 'true' });
+    window.Sprites.draw(c.getContext('2d'), name, 0, 0, 12);
+    return c;
+  }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const starsOf = (id) => S.stars[id] || 0;
   // 遊戲類型挑戰（W11 以後）：完成 6-5 就能開始任何一個類型，世界裡一關接一關解鎖
@@ -288,6 +295,7 @@
    * 關卡畫面
    * ========================================================= */
   function leaveLevel() {
+    closeClear();
     if (!cur) return;
     cur.token = null;
     if (cur.gview) { cur.gview.abort = true; cur.gview.destroy(); }
@@ -332,12 +340,14 @@
     const left = el('div', { class: 'col col-left' }, stageWrap, keysRow, stageNote, insp, con.root);
 
     // 右欄：說明、模式、編輯器或選項
-    const brief = el('section', { class: 'brief' },
-      el('div', { class: 'concept', html: lv.concept }),
-      el('div', { class: 'goal' }, el('span', { class: 'goal-tag' }, '任務'), el('span', null, lv.goal)),
-      el('div', { class: 'brief-foot' },
-        el('a', { href: lv.handbook, target: '_blank', rel: 'noopener' }, `看手冊：${WORLDS[lv.world].sub}`),
-        el('span', null, lv.kind === 'grid' ? '格子迷宮：程式從第一行開始，一行一行執行' : `Unity 模擬：程式寫在 ${lv.file}`)));
+    const brief = el('section', { class: 'brief npc' },
+      spriteCanvas('hero', 'npc-face'),
+      el('div', { class: 'brief-body' },
+        el('div', { class: 'concept', html: lv.concept }),
+        el('div', { class: 'goal' }, el('span', { class: 'goal-tag' }, '任務'), el('span', null, lv.goal)),
+        el('div', { class: 'brief-foot' },
+          el('a', { href: lv.handbook, target: '_blank', rel: 'noopener' }, `看手冊：${WORLDS[lv.world].sub}`),
+          el('span', null, lv.kind === 'grid' ? '格子迷宮：程式從第一行開始，一行一行執行' : `Unity 模擬：程式寫在 ${lv.file}`))));
     const tabCode = el('button', { class: 'tab', role: 'tab', type: 'button' }, '寫程式');
     const tabChoice = el('button', { class: 'tab', role: 'tab', type: 'button' }, '用選的');
     const runBtn = el('button', { class: 'btn btn-run', type: 'button' }, '▶ 執行');
@@ -575,8 +585,16 @@
     if (opts.choice) { opts.choice.verdict.hidden = true; }
     cur.editor.setErrors([]);
     cur.live = !!opts.live;
+    sfx('run');
     if (lv.kind === 'grid') runGrid(code, opts);
     else runUnity(code, opts);
+  }
+
+  // 格子迷宮的動作音效
+  const GRID_SFX = { move: 'step', bump: 'bump', jump: 'jump', hop: 'jump', coin: 'coin', pickup: 'coin', smash: 'hit', die: 'hurt', open: 'open', chest: 'open' };
+  function gridSound(ev) {
+    if (ev.t === 'attack') sfx(ev.kill ? 'poof' : ev.target ? 'hit' : 'bump');
+    else if (GRID_SFX[ev.t]) sfx(GRID_SFX[ev.t]);
   }
 
   async function runGrid(code, opts) {
@@ -599,7 +617,7 @@
       if (cur.token !== token) return;
       let events = run.events;
       if (run.err && run.err.kind === 'freeze') events = events.slice(0, 30);
-      await cur.gview.play(events, { speed: () => cur.speed, onLog: (t, k) => cur.con.add(t, k) });
+      await cur.gview.play(events, { speed: () => cur.speed, onLog: (t, k) => cur.con.add(t, k), onEvent: gridSound });
       if (cur.token !== token) return;
       if (run.err) {
         lastErr = run.err;
@@ -784,6 +802,42 @@
     const next = LEVELS[cur.lv.index + 1];
     if (a && next && unlocked(next)) { a.setAttribute('href', '#L' + next.id); a.removeAttribute('aria-disabled'); a.removeAttribute('style'); }
   }
+  // STAGE CLEAR：全畫面過關動畫，星星一顆一顆亮起
+  let clearOverlay = null;
+  let clearTimers = [];
+  function closeClear() {
+    clearTimers.forEach(clearTimeout);
+    clearTimers = [];
+    if (clearOverlay) { clearOverlay.remove(); clearOverlay = null; }
+  }
+  function showClear(n, text, next) {
+    closeClear();
+    const title = el('h2', { class: 'px-clear-title', 'aria-label': 'STAGE CLEAR!' },
+      [...'STAGE CLEAR!'].map((ch, i) => el('span', { class: ch === ' ' ? 'sp' : null, style: `--i:${i}`, 'aria-hidden': 'true' }, ch === ' ' ? '' : ch)));
+    const stars = [0, 1, 2].map(() => el('span', null, '★'));
+    const go = next && unlocked(next)
+      ? el('a', { class: 'btn btn-primary', href: '#L' + next.id }, `下一關：${next.id} ▶`)
+      : el('a', { class: 'btn btn-primary', href: '#map' }, '回地圖 ▶');
+    const stay = el('button', { class: 'btn', type: 'button', onclick: closeClear }, '留在這裡');
+    go.addEventListener('click', closeClear);
+    const bg = el('div', { class: 'px-clear-bg' },
+      el('div', { class: 'px-clear px-win', role: 'dialog', 'aria-modal': 'true', 'aria-label': `過關，得到 ${n} 顆星` },
+        title,
+        el('div', { class: 'px-clear-stars', 'aria-hidden': 'true' }, stars),
+        el('p', null, text),
+        el('div', { class: 'px-clear-row' }, go, stay)));
+    bg.addEventListener('click', (e) => { if (e.target === bg) closeClear(); });
+    document.body.appendChild(bg);
+    clearOverlay = bg;
+    go.focus({ preventScroll: true });
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const start = reduced ? 0 : 650;
+    const gap = reduced ? 0 : 330;
+    for (let i = 0; i < n; i++) clearTimers.push(setTimeout(() => { stars[i].classList.add('on'); sfx('star'); }, start + i * gap));
+    clearTimers.push(setTimeout(() => sfx('clear'), start + n * gap + 120));
+  }
+  const loseSound = (key) => sfx(key.startsWith('compile') ? 'error' : key === 'freeze' ? 'freeze' : 'fail');
+
   function finish(r, code, opts) {
     const lv = cur.lv;
     if (r.outcome === 'win') setTimeout(enableNextLink, 0);
@@ -802,7 +856,9 @@
         save();
         updateTopStars();
         showResult('win', `選項 ${letter} 正確！`, '用選的過關得 1 顆星。試試切換到「寫程式」自己寫一次，可以拿到 3 顆星。', [nextBtn(), el('button', { class: 'btn', type: 'button', onclick: () => setMode('code') }, '改用寫程式挑戰')], S.stars[lv.id]);
+        showClear(1, `選項 ${letter} 正確！用選的過關得 1 顆星，自己寫程式可以拿到 3 顆星。`, next);
       } else {
+        loseSound(outcomeKey);
         showResult('lose', `選項 ${letter}：${OUTCOME_LABEL(outcomeKey)}`, '看看上面的解說，再選一次。');
       }
       return;
@@ -816,8 +872,10 @@
       updateTopStars();
       const sol = el('details', null, el('summary', null, '看參考答案'), el('pre', { class: 'hint', style: 'white-space:pre;overflow-x:auto;font-family:var(--font-mono);font-size:12px' }, lv.solution));
       showResult('win', '過關！', usedHints ? '看過提示，這關得到 2 顆星。不看提示重新寫一次可以拿到 3 顆星。' : '沒看提示就寫出來了，3 顆星！', [nextBtn(), el('a', { class: 'btn', href: '#map' }, '回地圖'), sol], got);
+      showClear(got, usedHints ? '看過提示，得到 2 顆星。不看提示再寫一次可以拿到 3 顆星。' : '沒看提示就寫出來了，3 顆星！', next);
       return;
     }
+    loseSound(outcomeKey);
     if (r.outcome === 'compile') {
       const e = r.errors[0];
       showResult('lose', `編譯錯誤 ${e.code}（第 ${e.line} 行）`, `${ZH[e.code] || ''}。Console 有紅字時程式不會執行，點 Console 的錯誤可以跳到那一行。`);
@@ -1085,6 +1143,31 @@
   document.getElementById('settingsClose').addEventListener('click', () => { settings.hidden = true; route(); });
   settings.addEventListener('click', (e) => { if (e.target === settings) { settings.hidden = true; route(); } });
   unlockAll.addEventListener('change', () => { S.unlockAll = unlockAll.checked; save(); });
+
+  // 音效開關：頂部按鈕和設定視窗共用 SFX.enabled
+  const soundBtn = document.getElementById('soundBtn');
+  const soundOn = document.getElementById('soundOn');
+  function syncSound() {
+    const on = !!(window.SFX && window.SFX.enabled);
+    soundBtn.setAttribute('aria-pressed', String(on));
+    soundBtn.title = on ? '音效：開（按一下關掉）' : '音效：關（按一下打開）';
+    soundOn.checked = on;
+  }
+  function setSound(on) {
+    if (!window.SFX) return;
+    window.SFX.enabled = on;
+    syncSound();
+    sfx('select');
+  }
+  soundBtn.addEventListener('click', () => setSound(!window.SFX.enabled));
+  soundOn.addEventListener('change', () => setSound(soundOn.checked));
+  syncSound();
+  // 按鈕和關卡格的「嗶」聲（執行鈕、選這個有自己的音效）
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.btn, .node, .tab');
+    if (!b || b === soundBtn || b.classList.contains('btn-run') || b.classList.contains('btn-primary') && b.closest('.choice')) return;
+    sfx('select');
+  });
   resetBtn.addEventListener('click', () => {
     if (resetConfirm.hidden) { resetConfirm.hidden = false; return; }
     S.stars = {}; S.code = {}; S.hints = {}; S.mode = {}; S.insp = {}; S.last = null;
@@ -1094,7 +1177,11 @@
     location.hash = 'map';
     route();
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !settings.hidden) { settings.hidden = true; route(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (clearOverlay) { closeClear(); return; }
+    if (!settings.hidden) { settings.hidden = true; route(); }
+  });
 
   function route() {
     const h = location.hash.slice(1);
@@ -1112,6 +1199,38 @@
     const c = document.getElementById('logoIcon');
     const ctx = c.getContext('2d');
     window.Sprites.draw(ctx, 'hero', 0, 0, 12);
+  })();
+
+  // 開場畫面：每次開網站出現一次；直接開某一關的網址就跳過
+  (function titleScreen() {
+    let seen = false;
+    try { seen = sessionStorage.getItem('csq-title') === '1'; } catch (e) { /* 沒有 sessionStorage 就每次都顯示 */ }
+    const h = location.hash.slice(1);
+    if (seen || (h && h !== 'map')) return;
+    const total = LEVELS.reduce((s, l) => s + starsOf(l.id), 0);
+    const press = el('p', { class: 'px-title-press' }, '▶ PRESS START');
+    const scr = el('div', { class: 'px-title', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'C# 小勇者開場畫面', tabindex: '-1' },
+      el('div', { class: 'px-title-in' },
+        el('div', { class: 'px-title-art' }, spriteCanvas('hero'), spriteCanvas('coin'), spriteCanvas('slime')),
+        el('h1', null, 'C# 小勇者'),
+        el('p', { class: 'px-title-sub' }, '寫程式，帶勇者闖進 Unity 的世界'),
+        press,
+        el('p', { class: 'px-title-hint' }, total ? `目前收集 ★ ${total} / ${LEVELS.length * 3}・點一下或按 Enter 繼續冒險` : '點一下或按 Enter 開始冒險')));
+    let done = false;
+    const start = () => {
+      if (done) return;
+      done = true;
+      try { sessionStorage.setItem('csq-title', '1'); } catch (e) { /* 存不了也沒關係 */ }
+      document.removeEventListener('keydown', onKey);
+      sfx('start');
+      scr.classList.add('out');
+      setTimeout(() => scr.remove(), 320);
+    };
+    const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); start(); } };
+    scr.addEventListener('click', start);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(scr);
+    scr.focus({ preventScroll: true });
   })();
 
   route();
